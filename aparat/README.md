@@ -12,7 +12,12 @@ Uploads a video to your own Aparat channel (aparat.com) from the command line, w
 
 ## Setup for an agent
 1. `pip install requests` and check `ffprobe -version`.
-2. Create `cookies.json` in this folder (git-ignored): a flat JSON object `{ "cookie name": "value", ... }` with the `aparat.com` cookies of your signed-in session. It must contain `AuthV1`. Get them from browser dev tools (Application > Cookies > aparat.com) or a cookie-export extension. Never paste the values into chat or logs.
+2. Login, one time, done by YOU (the agent cannot sign in for you):
+   1. In Chrome, open https://www.aparat.com and sign in to the account that owns your channel.
+   2. Press F12, open the **Application** tab, then **Storage > Cookies > https://www.aparat.com**.
+   3. Find `AuthV1` and copy its **Value**.
+   4. The agent creates `cookies.json` here as `{"AuthV1": ""}`; open it in a text editor and paste the value between the quotes. Never paste it into the chat.
+   If the test below fails with an auth error, add the other aparat.com cookies from the same list the same way (`"name": "value"` pairs).
    - Optional automation: `grab_cookies.py` (run by `aparat.py refresh-cookies`, and automatically when `cookies.json` is missing) copies them through the "Browser Bridge" Chrome extension. It needs `bridge_path` and `bridge_profile` in the config (below). Without them it stops with a message; just write `cookies.json` by hand.
 3. Test: `python aparat.py categories` (prints category ids and names; fails with an HTTP error if the cookies are wrong or expired).
 

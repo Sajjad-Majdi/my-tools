@@ -13,7 +13,12 @@ The Gemini web app (gemini.google.com) from the command line with your own Googl
 ## Setup for an agent
 1. `cd <this folder>` then `python -m venv .venv`
 2. `.venv\Scripts\python.exe -m pip install gemini_webapi==2.1.1`
-3. Create `cookies.json` in this folder (git-ignored): a flat JSON object `{ "cookie name": "value", ... }` with all `*.google.com` cookies of a browser signed in to Gemini. It must contain `__Secure-1PSID` and `__Secure-1PSIDTS`. Get them from browser dev tools (Application > Cookies), a cookie-export extension, or any tool that reads your browser cookies. Never print or paste them into chat.
+3. Login, one time, done by YOU (the agent cannot sign in for you):
+   1. In Chrome, open https://gemini.google.com and make sure you are signed in.
+   2. Press F12, open the **Application** tab, then **Storage > Cookies > https://gemini.google.com**.
+   3. Find `__Secure-1PSID` and `__Secure-1PSIDTS` and copy each **Value**.
+   4. The agent creates `cookies.json` here as `{"__Secure-1PSID": "", "__Secure-1PSIDTS": ""}`; open it in a text editor and paste the two values between the quotes. Never paste them into the chat.
+   When the tool later says the cookies expired, repeat steps 2-4.
    - Optional automation: `grab_cookies.py` (run by `gweb.py refresh-cookies`, and automatically when `cookies.json` is missing) copies them through the "Browser Bridge" Chrome extension. It needs `bridge_path` and `bridge_profile` in the config (below). Without them it stops with a message; just write `cookies.json` by hand.
 4. If you need a proxy or custom output folders: copy `config.example.json` to `config.local.json` (private, git-ignored) and keep only the keys you need.
 5. Test: `.venv\Scripts\python.exe gweb.py status` (prints models and quotas).

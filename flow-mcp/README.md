@@ -13,7 +13,12 @@ MCP server and CLI for Google Flow (flow.google.com: Veo / Omni video, Nano Bana
 ## Setup for an agent
 1. `cd <this folder>` then `python -m venv .venv`
 2. `.venv\Scripts\python.exe -m pip install playwright==1.64.1 mcp==2.3.0`
-3. Create the logged-in Chrome profile. Easiest: `uv tool install gflow-cli`, then `gflow auth login --profile myname` (a window opens once; sign in to Google and open Flow). Its profile folder is `%LOCALAPPDATA%\ffroliva\gflow-cli\profile_<name>`. If gflow-cli's default profile is the one you want, flow-mcp finds it by itself; otherwise set `profile` (step 4).
+3. Login, one time (the agent runs the commands; YOU sign in):
+   1. Agent: install uv if missing (`pip install uv`), then `uv tool install gflow-cli`.
+   2. Agent: `gflow auth login --profile main`. A Chrome window opens.
+   3. You: sign in to your Google account in that window, open https://flow.google.com once, wait until your projects show, then close the window.
+   4. Agent: the login is saved in `%LOCALAPPDATA%\ffroliva\gflow-cli\profile_main`. Put that full path in `config.local.json` as `"profile"` (step 4), so flow-mcp always uses this login.
+   If Flow later says you are signed out, repeat steps 2-3.
 4. Copy `config.example.json` to `config.local.json` (private, git-ignored) and keep only the keys you need (see Configuration). With a direct connection and the gflow default profile you need no file at all.
 5. Test: `.venv\Scripts\python.exe -I flow.py credits` (first call takes 20-60 s; prints JSON).
 6. Register the MCP server (absolute paths):
