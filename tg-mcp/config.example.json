@@ -1,0 +1,11 @@
+{
+  "relayHost": "tg-user-relay.YOUR-SUBDOMAIN.workers.dev",
+  "relaySecret": "SAME_VALUE_AS_THE_WORKER_SECRET_RELAY_SECRET",
+  "apiId": 12345,
+  "apiHash": "32_HEX_CHARS_FROM_MY_TELEGRAM_ORG",
+  "ownerPort": 47613,
+  "identity": {
+    "deviceModel": "Your PC model (optional, default: the host name)",
+    "appVersion": "7.3.1 x64"
+  }
+}

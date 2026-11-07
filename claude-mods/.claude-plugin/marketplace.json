@@ -1,0 +1,1 @@
+{ "name": "sajjad-mods", "owner": { "name": "Sajjad" }, "plugins": [ { "name": "context-meter", "source": "./context-meter", "description": "Context ring in the prompt footer and running-subagent capsules with hover cards." } ] }

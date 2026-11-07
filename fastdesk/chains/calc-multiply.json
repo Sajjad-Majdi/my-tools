@@ -1,0 +1,17 @@
+{"about": "Windows Calculator: 1234 x 5678, read display, close", "steps": [
+{"open": "calc.exe"},
+{"wait": "Calculator", "timeout": 15},
+{"click": "Clear", "role": "button", "window": "Calculator"},
+{"click": "One", "role": "button", "window": "Calculator"},
+{"click": "Two", "role": "button", "window": "Calculator"},
+{"click": "Three", "role": "button", "window": "Calculator"},
+{"click": "Four", "role": "button", "window": "Calculator"},
+{"click": "Multiply by", "role": "button", "window": "Calculator"},
+{"click": "Five", "role": "button", "window": "Calculator"},
+{"click": "Six", "role": "button", "window": "Calculator"},
+{"click": "Seven", "role": "button", "window": "Calculator"},
+{"click": "Eight", "role": "button", "window": "Calculator"},
+{"click": "Equals", "role": "button", "window": "Calculator"},
+{"read": "Display is.*", "window": "Calculator"},
+{"close": "Calculator"}
+]}

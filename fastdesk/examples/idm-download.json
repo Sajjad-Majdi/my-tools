@@ -1,0 +1,59 @@
+{
+ "about": "IDM (Persian UI): add {url}, start it, read progress, hide the progress window beside the clock (download continues), minimize IDM. Vars: url",
+ "steps": [
+  {
+   "open": "C:/Program Files (x86)/Internet Download Manager/IDMan.exe",
+   "settle": 0.3
+  },
+  {
+   "wait": "Internet Download Manager",
+   "timeout": 10
+  },
+  {
+   "click": null,
+   "role": "button",
+   "index": 0
+  },
+  {
+   "wait": "آدرس جديدي",
+   "timeout": 10,
+   "new": true
+  },
+  {
+   "set": null,
+   "role": "textfield",
+   "index": 0,
+   "value": "{url}"
+  },
+  {
+   "click": "تأييد",
+   "role": "button"
+  },
+  {
+   "wait": "Download File Info",
+   "timeout": 20,
+   "new": true
+  },
+  {
+   "click": "شروع دانلود",
+   "role": "button"
+  },
+  {
+   "wait": "%",
+   "timeout": 20,
+   "new": true
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "read": "MB|KB|sec|ثانيه|دقيقه|%"
+  },
+  {
+   "hide": "%"
+  },
+  {
+   "minimize": "Internet Download Manager"
+  }
+ ]
+}

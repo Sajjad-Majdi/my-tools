@@ -1,0 +1,43 @@
+# deps and builds
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.wrangler/
+*.exe
+*.zip
+# runtime data, logs, outputs
+*.log
+*.out
+*.lock
+*.bak
+logs/
+out/
+test-out/
+downloads/
+attachments/
+archive/
+state/
+cookie_cache/
+last_sent*.txt
+bot-state.json
+# secrets: never commit
+.env
+*.env
+*.key
+token.txt
+session.txt
+cookies*.json
+config.json
+bot.config.json
+extension/config.js
+# agent memory files
+MEMORY.md
+AGENTS.md
+CLAUDE.md
+dev/cap/
+
+# per-user config and proxy links
+config.local.json
+proxy_links.txt
+dev/

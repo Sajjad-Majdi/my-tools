@@ -1,0 +1,4 @@
+{
+  "bridge_path": "C:/path/to/browser-bridge",
+  "bridge_profile": "<chrome profile name>"
+}

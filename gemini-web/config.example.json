@@ -1,0 +1,11 @@
+{
+  "proxy": "http://127.0.0.1:10808",
+  "out_dir": "C:/path/to/output",
+  "out_dirs": {
+    "image": "C:/path/to/images",
+    "video": "C:/path/to/videos",
+    "music": "C:/path/to/music"
+  },
+  "bridge_path": "C:/path/to/browser-bridge",
+  "bridge_profile": "<chrome profile name>"
+}

@@ -1,0 +1,14 @@
+# Only my own tools are tracked; third-party apps, binaries and data stay out.
+/*
+!/.gitignore
+!/README.md
+!/backup.sh
+!/aparat/
+!/browser-bridge/
+!/claude-mods/
+!/fastdesk/
+!/flow-mcp/
+!/gemini-web/
+!/idmdl/
+!/persian-guard/
+!/tg-mcp/

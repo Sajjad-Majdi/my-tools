@@ -1,0 +1,9 @@
+# Copy to idm.config next to idm.exe (idm.config is git-ignored). Environment variables with the same names win over this file.
+# Path of IDMan.exe; default: HKCU\Software\DownloadManagerxePath, else C:\Program Files (x86)\Internet Download Manager\IDMan.exe
+#IDM_EXE=C:\Program Files (x86)\Internet Download Manager\IDMan.exe
+# Name of the IDM queue the tool may use (create it once in IDM Scheduler)
+IDM_QUEUE=Agent Queue
+# queueID that IDM writes into HKCU\Software\DownloadManager\<download id> for items in that queue
+IDM_QUEUE_ID=3
+# WM_COMMAND id of the menu item "Move to queue > <your queue>"
+IDM_MOVE_CMD=10038

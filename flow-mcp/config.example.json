@@ -1,0 +1,9 @@
+{
+  "profile": "C:/Users/<you>/AppData/Local/ffroliva/gflow-cli/profile_<name>",
+  "proxy": "none",
+  "xray_path": "C:/path/to/xray.exe",
+  "proxy_links_file": "C:/path/to/proxy_links.txt",
+  "proxy_order": [0, 1],
+  "proxy_port": 10818,
+  "idle_close_s": 180
+}

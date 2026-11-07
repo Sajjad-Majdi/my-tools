@@ -1,0 +1,142 @@
+<!doctype html><html lang=fa dir=rtl><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>پاک‌سازی تلگرام</title>
+<style>:root{--bg:#f6f4ef;--fg:#1d1c1a;--mut:#77736b;--line:#e2ded5;--acc:#c46a1c;--bad:#b3261e;--ok:#2e7d32;--card:#fffdf8}
+@media(prefers-color-scheme:dark){:root{--bg:#1b1a18;--fg:#ece8e0;--mut:#9a958c;--line:#2e2c29;--acc:#e08a3c;--bad:#ef6b5e;--ok:#7cc47f;--card:#242320}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 Vazirmatn,Tahoma,sans-serif;padding:16px 16px 96px;max-width:900px;margin-inline:auto}
+h1{font-size:18px;margin:4px 0 2px}p.sub{color:var(--mut);margin:0 0 10px;font-size:13px}
+.dry{background:var(--acc);color:#fff;border-radius:8px;padding:6px 10px;margin:0 0 10px;font-size:13px;display:none}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 6px}
+.tools input,.tools select{font:inherit;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:5px 9px}
+.tools input{flex:1;min-width:180px}.tools label{color:var(--mut);font-size:13px;display:flex;gap:4px;align-items:center}
+h2{font-size:14px;margin:20px 0 4px;display:flex;gap:8px;align-items:center;position:sticky;top:0;background:var(--bg);padding:6px 0;border-bottom:1px solid var(--line);z-index:1}
+.n{color:var(--mut);font-weight:400}h2 button{font:inherit;font-size:12px;background:none;border:1px solid var(--line);color:var(--mut);border-radius:6px;padding:1px 8px;cursor:pointer}h2 .all{margin-inline-start:auto}
+.row{display:grid;grid-template-columns:20px minmax(0,1.3fr) 82px minmax(0,1.6fr);gap:8px;align-items:center;padding:5px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.row input{accent-color:var(--acc)}.name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}small{color:var(--mut)}
+.date{color:var(--mut);font-size:12px;direction:ltr;text-align:right}.txt{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{font-size:11px;color:var(--acc);margin-inline-start:6px}.row.gone{opacity:.4;text-decoration:line-through;pointer-events:none}.row.err .name{color:var(--bad)}
+@media(max-width:600px){.row{grid-template-columns:20px 1fr 76px}.txt{display:none}}
+.bar{position:fixed;inset:auto 0 0 0;background:var(--fg);color:var(--bg);display:flex;gap:12px;align-items:center;justify-content:center;padding:12px 16px;z-index:2}
+.bar button,dialog button{font:inherit;border:0;border-radius:8px;padding:7px 16px;cursor:pointer}
+.go{background:var(--bad);color:#fff}.go:disabled{opacity:.45;cursor:default}.plain{background:none;color:inherit;border:1px solid var(--line)!important}
+dialog{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:18px;max-width:440px;width:calc(100% - 32px)}
+dialog::backdrop{background:#0008}dialog h3{margin:0 0 8px;font-size:16px}dialog p{margin:6px 0;color:var(--mut);font-size:13px}
+.btns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.prog{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:10px 0}.prog i{display:block;height:100%;width:0;background:var(--acc);transition:width .3s}
+.stat{font-size:13px}.stat b.ok{color:var(--ok)}.stat b.bad{color:var(--bad)}.fails{max-height:160px;overflow:auto;font-size:12px;color:var(--bad);margin-top:8px}
+.msg{color:var(--mut);padding:30px 0;text-align:center}</style></head><body>
+<h1>پاک‌سازی تلگرام</h1>
+<p class=sub>چت‌های تیک‌خورده فقط برای شما حذف می‌شوند (برای طرف مقابل باقی می‌مانند). از گروه‌ها و کانال‌ها خارج می‌شوید. این صفحه فقط با کلیک شما حذف می‌کند.</p>
+<div class=dry id=dry>حالت آزمایشی: هیچ چتی حذف نمی‌شود.</div>
+<div class=tools><input id=q type=search placeholder="جستجوی نام یا نام کاربری…"><select id=arch><option value=all>همه‌ی چت‌ها</option><option value=yes>فقط آرشیوشده</option><option value=no>بدون آرشیو</option></select><label><input type=checkbox id=onlysel> فقط تیک‌خورده‌ها</label></div>
+<div id=list><p class=msg>در حال خواندن چت‌ها… (بار اول حدود ۱ تا ۲ دقیقه)</p></div>
+<div class=bar><span id=cnt>۰ چت انتخاب شده</span><button class=go id=go disabled>حذف ۰ چت</button></div>
+<dialog id=ask><h3 id=askT></h3><p>هر چت فقط از حساب شما حذف می‌شود؛ پیام‌ها برای طرف مقابل می‌مانند. از گروه‌ها و کانال‌های انتخاب‌شده خارج می‌شوید.</p><p>این کار برگشت‌پذیر نیست. بین هر دو چت حدود ۶ ثانیه فاصله است.</p><div class=btns><button class=plain id=no>انصراف</button><button class=go id=yes>بله، حذف شود</button></div></dialog>
+<dialog id=run><h3 id=runT>در حال حذف…</h3><div class=prog><i id=pbar></i></div><div class=stat id=pstat></div><p id=pwait></p><div class=fails id=pfail></div><div class=btns><button class=plain id=stop>توقف</button><button class=plain id=close style="display:none">بستن</button></div></dialog>
+<script>
+const CSRF = "__CSRF__", DRY = "__DRY__" === "1", T = new URLSearchParams(location.search).get("t");
+const fa = (n) => String(n).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[d]);
+const $ = (id) => document.getElementById(id);
+const api = (p, body) => fetch(`${p}?t=${encodeURIComponent(T)}`, body === undefined ? { headers: { "x-csrf": CSRF } }
+  : { method: "POST", headers: { "x-csrf": CSRF, "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+const SECTIONS = [["deleted", "حساب‌های حذف‌شده"], ["joined", "فقط «به تلگرام پیوست»"], ["bots", "بات‌ها"],
+  ["old", "افرادی که بیش از یک سال پیامی نداشته‌اند"], ["other", "سایر چت‌ها"]];
+const rows = []; // {d, el, box}
+if (DRY) $("dry").style.display = "block";
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+
+function render(data) {
+  const list = $("list");
+  list.textContent = "";
+  for (const [key, title] of SECTIONS) {
+    const items = data.rows.filter((r) => r.sec === key);
+    if (!items.length) continue;
+    const sec = el("section");
+    const h = el("h2", "", title + " ");
+    const n = el("span", "n");
+    const all = el("button", "all", "همه"), none = el("button", "", "هیچ");
+    all.type = none.type = "button";
+    h.append(n, all, none);
+    sec.append(h);
+    const mine = [];
+    for (const d of items) {
+      const lab = el("label", "row"), box = el("input");
+      box.type = "checkbox"; box.checked = d.pre; box.value = d.id;
+      const name = el("span", "name", d.name + " ");
+      if (d.username) name.append(el("small", "", "@" + d.username));
+      for (const t of d.tags) name.append(el("span", "tag", t));
+      if (d.archived) name.append(el("span", "tag", "آرشیو"));
+      lab.append(box, name, el("span", "date", (d.date || "").slice(0, 10)), el("span", "txt", d.text || ""));
+      sec.append(lab);
+      const r = { d, el: lab, box, sec: n };
+      rows.push(r); mine.push(r);
+      box.addEventListener("change", count);
+    }
+    const setAll = (v) => { for (const r of mine) if (r.el.style.display !== "none" && !r.done) r.box.checked = v; count(); };
+    all.onclick = () => setAll(true); none.onclick = () => setAll(false);
+    sec.counter = () => { const vis = mine.filter((r) => r.el.style.display !== "none"); n.textContent = `${fa(vis.filter((r) => r.box.checked).length)} از ${fa(vis.length)}`; sec.style.display = vis.length ? "" : "none"; };
+    list.append(sec);
+  }
+  filter();
+}
+
+function filter() {
+  const q = $("q").value.trim().toLowerCase(), a = $("arch").value, only = $("onlysel").checked;
+  for (const r of rows) {
+    const hit = (!q || r.d.name.toLowerCase().includes(q) || (r.d.username || "").toLowerCase().includes(q) || r.d.id.includes(q))
+      && (a === "all" || (a === "yes") === r.d.archived) && (!only || r.box.checked);
+    r.el.style.display = hit ? "" : "none";
+  }
+  count();
+}
+
+function count() {
+  const n = rows.filter((r) => r.box.checked && !r.done).length;
+  $("cnt").textContent = `${fa(n)} چت انتخاب شده`;
+  $("go").textContent = `حذف ${fa(n)} چت`;
+  $("go").disabled = !n;
+  document.querySelectorAll("section").forEach((s) => s.counter && s.counter());
+}
+
+$("q").addEventListener("input", filter); $("arch").addEventListener("change", filter); $("onlysel").addEventListener("change", filter);
+$("go").onclick = () => { const n = rows.filter((r) => r.box.checked && !r.done).length; $("askT").textContent = `${fa(n)} چت حذف شود؟` + (DRY ? " (آزمایشی)" : ""); $("ask").showModal(); };
+$("no").onclick = () => $("ask").close();
+$("yes").onclick = async () => {
+  $("ask").close();
+  const ids = rows.filter((r) => r.box.checked && !r.done).map((r) => r.d.id);
+  const s = await api("/cleanup/delete", { ids });
+  if (!s.ok) return alert(s.error);
+  $("close").style.display = "none"; $("stop").style.display = ""; $("pfail").textContent = "";
+  $("run").showModal(); poll();
+};
+$("stop").onclick = () => api("/cleanup/stop", {});
+$("close").onclick = () => $("run").close();
+
+async function poll() {
+  const s = await api("/cleanup/status").catch(() => null);
+  if (s && s.ok) {
+    $("pbar").style.width = (s.total ? 100 * s.done / s.total : 0) + "%";
+    $("pstat").innerHTML = "";
+    $("pstat").append(`${fa(s.done)} از ${fa(s.total)} — `, el("b", "ok", `${fa(s.succeeded)} موفق`), "، ", el("b", "bad", `${fa(s.failed)} ناموفق`));
+    $("pwait").textContent = s.wait_s ? `تلگرام خواسته صبر کنیم؛ ادامه تا ${fa(s.wait_s)} ثانیه‌ی دیگر…` : s.running && s.current ? `در حال پردازش: ${s.current}` : "";
+    const byId = new Map(rows.map((r) => [r.d.id, r]));
+    const fails = [];
+    for (const x of s.results) {
+      const r = byId.get(x.id);
+      if (r && x.ok && !DRY) { r.done = true; r.box.checked = false; r.el.classList.add("gone"); }
+      if (!x.ok) { fails.push(`${x.name}: ${x.error}`); if (r) r.el.classList.add("err"); }
+    }
+    $("pfail").textContent = fails.join("\n");
+    $("pfail").style.whiteSpace = "pre-line";
+    if (!s.running) {
+      $("runT").textContent = (s.stopped ? "متوقف شد" : "تمام شد") + (DRY ? " (آزمایشی، چیزی حذف نشد)" : "");
+      $("stop").style.display = "none"; $("close").style.display = ""; $("pwait").textContent = ""; count();
+      return;
+    }
+    $("runT").textContent = "در حال حذف…" + (DRY ? " (آزمایشی)" : "");
+  }
+  setTimeout(poll, 1000);
+}
+
+api("/cleanup/data").then((d) => { if (!d.ok) throw new Error(d.error); render(d); })
+  .catch((e) => { $("list").textContent = ""; $("list").append(el("p", "msg", "خطا: " + e.message)); });
+</script></body></html>
