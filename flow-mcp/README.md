@@ -1,5 +1,7 @@
 # flow-mcp
 
+> **Quick setup:** give your AI agent this line: *Download https://github.com/Sajjad-Majdi/my-tools/releases/download/flow-mcp/flow-mcp.zip, unzip it, and set it up for me by following its README.md.*
+
 MCP server and CLI for Google Flow (flow.google.com: Veo / Omni video, Nano Banana images). It calls Flow's own `batchexecute` RPCs from inside a headless Chrome page that holds your Google login. Generation steps (image/video/edit/upload) are driven through Flow's own composer; the page sends its own reCAPTCHA token.
 
 ## Requirements

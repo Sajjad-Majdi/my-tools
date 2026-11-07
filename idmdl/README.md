@@ -1,5 +1,7 @@
 # idmdl
 
+> **Quick setup:** give your AI agent this line: *Download https://github.com/Sajjad-Majdi/my-tools/releases/download/idmdl/idmdl.zip, unzip it, and set it up for me by following its README.md.*
+
 `idm.exe`: a command-line controller for Internet Download Manager (IDM) written in one C# file (`idm.cs`). It starts downloads, adds many links into a dedicated IDM queue, reports progress from IDM's registry and live logs, stops downloads, and leaves no IDM window on the screen after each command.
 
 ## Requirements

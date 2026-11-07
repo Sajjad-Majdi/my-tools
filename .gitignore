@@ -3,6 +3,7 @@
 !/.gitignore
 !/README.md
 !/backup.sh
+!/release.sh
 !/aparat/
 !/browser-bridge/
 !/claude-mods/

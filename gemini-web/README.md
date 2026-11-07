@@ -1,5 +1,7 @@
 # gemini-web
 
+> **Quick setup:** give your AI agent this line: *Download https://github.com/Sajjad-Majdi/my-tools/releases/download/gemini-web/gemini-web.zip, unzip it, and set it up for me by following its README.md.*
+
 The Gemini web app (gemini.google.com) from the command line with your own Google account: ask (with files), generate images, video and music, Deep Research, list models and quotas. Uses the unofficial `gemini_webapi` library (reverse-engineered web API) with your browser cookies. Chats are sent as temporary chats.
 
 ## Requirements

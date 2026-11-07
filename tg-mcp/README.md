@@ -1,5 +1,7 @@
 # tg-mcp
 
+> **Quick setup:** give your AI agent this line: *Download https://github.com/Sajjad-Majdi/my-tools/releases/download/tg-mcp/tg-mcp.zip, unzip it, and set it up for me by following its README.md.*
+
 Gives AI agents one personal Telegram account (user account, not a bot) through a single local background daemon, a stdio MCP server (`server.mjs`) and a CLI (`tg`). Tools: list chats, read history, search, unread, download media, mark read, send text/files/voice, forward, edit own messages, press bot buttons, folders, archive. There is no delete tool on purpose. Node.js, GramJS.
 
 ## Requirements

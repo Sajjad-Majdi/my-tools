@@ -1,5 +1,7 @@
 # Browser Bridge
 
+> **Quick setup:** give your AI agent this line: *Download https://github.com/Sajjad-Majdi/my-tools/releases/download/browser-bridge/browser-bridge.zip, unzip it, and set it up for me by following its README.md.*
+
 Lets an AI agent drive the user's real, signed-in Chrome: list/open/close tabs, read page text, click and type with real input events, press shortcuts, take screenshots, run CDP calls. A Chrome extension (one per profile) keeps a WebSocket to a small local relay, `bb.exe`, which is also the command line.
 
 ## Requirements

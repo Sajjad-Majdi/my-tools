@@ -1,5 +1,7 @@
 # FastDesk
 
+> **Quick setup:** give your AI agent this line: *Download https://github.com/Sajjad-Majdi/my-tools/releases/download/fastdesk/fastdesk.zip, unzip it, and set it up for me by following its README.md.*
+
 Lets an agent operate Windows desktop apps through UI Automation. It lists windows, prints a window's elements (role, name, value), and runs a whole JSON "chain" of steps (open, wait, click, set text, toggle, menu, read, minimize, close) in one command with no model call between steps. Elements are found by role and name, never by pixel position, and the real mouse never moves.
 
 ## Requirements

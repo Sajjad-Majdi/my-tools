@@ -2,7 +2,12 @@
 
 Small tools for working with AI agents on Windows. Each folder is one tool and has its own `README.md` with a short setup guide.
 
-To set one up, give an AI coding agent that tool's folder and say: "Set this up for me by following its README.md." Every value you must supply (tokens, cookies, accounts, paths) is listed in that README and goes in a local config file that is never committed. No secrets are stored in this repo.
+## Set up one tool (no clone needed)
+Every tool has its own zip in [Releases](https://github.com/Sajjad-Majdi/my-tools/releases). Give your AI agent one line:
+
+> Download `https://github.com/Sajjad-Majdi/my-tools/releases/download/<tool>/<tool>.zip`, unzip it, and set it up for me by following its README.md.
+
+Replace `<tool>` with a folder name below (for example `flow-mcp`). Every value you must supply (tokens, cookies, accounts, paths) is listed in that tool's README and goes in a local config file that is never committed. No secrets are stored in this repo.
 
 ## Agent control
 | Tool | What it does |
@@ -22,4 +27,4 @@ To set one up, give an AI coding agent that tool's folder and say: "Set this up 
 | [aparat](aparat/) | Upload and publish videos to your Aparat channel without a browser |
 
 ## Backup
-`bash backup.sh` copies the browser-bridge sources in, commits every change and pushes.
+`bash backup.sh` copies the browser-bridge sources in, commits every change and pushes. `bash release.sh [tool]` rebuilds the release zips.

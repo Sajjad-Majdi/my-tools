@@ -1,5 +1,7 @@
 # aparat
 
+> **Quick setup:** give your AI agent this line: *Download https://github.com/Sajjad-Majdi/my-tools/releases/download/aparat/aparat.zip, unzip it, and set it up for me by following its README.md.*
+
 Uploads a video to your own Aparat channel (aparat.com) from the command line, with no browser UI. It replays the requests of Aparat's web upload page (chunked upload, then the metadata form), and can publish a saved draft. Unofficial and reverse-engineered, so it can break when Aparat changes its site.
 
 ## Requirements

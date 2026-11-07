@@ -1,5 +1,7 @@
 # claude-mods
 
+> **Quick setup:** give your AI agent this line: *Download https://github.com/Sajjad-Majdi/my-tools/releases/download/claude-mods/claude-mods.zip, unzip it, and set it up for me by following its README.md.*
+
 A small collection of Claude Code "mods" (plugins that change Claude Code's own interface, written against its `claude-code` hooks API). Marketplace name: `sajjad-mods`. It currently holds one mod:
 
 - `context-meter`: a context-window ring (percent of the window used, with the compaction point) in the prompt footer, plus a counter of running subagents and background tasks, each with a hover card (model, effort, status, a Compact button).

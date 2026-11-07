@@ -1,5 +1,7 @@
 # persian-guard
 
+> **Quick setup:** give your AI agent this line: *Download https://github.com/Sajjad-Majdi/my-tools/releases/download/persian-guard/persian-guard.zip, unzip it, and set it up for me by following its README.md.*
+
 A Claude Code `Stop` hook (one Python file, no dependencies). When the user's last own message was in Persian, it checks the assistant's final reply and, if the reply is mostly Latin letters or any line starts with a Latin word or a digit (which breaks right-to-left display), it blocks the stop and tells Claude to rewrite the whole reply in Persian. It never changes files and never calls a network.
 
 ## Requirements
