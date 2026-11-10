@@ -1,1 +1,1 @@
-{ "name": "context-meter", "version": "0.2.1", "description": "A context ring and a subagent counter beside the prompt, with hover cards.", "types": "./types/index.d.ts" }
+{ "name": "context-meter", "version": "0.2.2", "description": "A context ring and a subagent counter beside the prompt, with hover cards.", "types": "./types/index.d.ts" }

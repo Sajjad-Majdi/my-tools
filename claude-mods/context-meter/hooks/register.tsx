@@ -266,7 +266,7 @@ export const register: Register = on => {
     const walk = (parent: string | null, depth: number) => {
       for (const s of live.filter(x => (parent === null ? !live.some(p => p.id === x.parentId) : x.parentId === parent))) {
         subRows.push(
-          row(`s-${s.id}`, (depth > 0 ? '  '.repeat(depth - 1) + '└ ' : '') + cut(s.description || s.type, 34), `${s.model ? shortModel(s.model) : '—'} · ${s.effort || 'default'}`, '#e6e6e6', famColor(s.model)),
+          row(`s-${s.id}`, (depth > 0 ? '  '.repeat(depth) + '└ ' : '• ') + cut(s.description || s.type, 34), `${s.model ? shortModel(s.model) : '—'} · ${s.effort || 'default'}`, '#e6e6e6', famColor(s.model)),
         )
         walk(s.id, depth + 1)
       }
@@ -283,7 +283,7 @@ export const register: Register = on => {
     const bgCard = (
       <Box flexDirection="column">
         {head('Background tasks', `${bgs.length} running`)}
-        {bgs.length > 0 ? bgs.map(b => row(`b-${b.id}`, cut(b.description, 40), b.type)) : row('b-none', 'None running', '')}
+        {bgs.length > 0 ? bgs.map(b => row(`b-${b.id}`, '• ' + cut(b.description, 40), b.type)) : row('b-none', 'None running', '')}
       </Box>
     )
 
