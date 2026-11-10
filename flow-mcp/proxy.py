@@ -1,8 +1,9 @@
 """Optional private xray proxy for Flow, for countries where Google answers 403.
 
-Mode (config key `proxy` / env FLOW_PROXY):
+Mode (config key `proxy` / env FLOW_PROXY): one mode, or a list (JSON list or comma string) tried in order, where the
+first one that reaches Flow within PROBE_S seconds wins and is kept for CACHE_S seconds:
   none (default)      no proxy; Chrome and downloads connect directly
-  http://host:port    use that existing HTTP proxy as is
+  http://host:port    use that existing HTTP proxy
   xray                build an xray config from the first working trojan/vless link in the links file and run xray hidden
                       on 127.0.0.1:<proxy_port>. One copy only: if the port already answers, it is reused.
 Other keys: xray_path (FLOW_XRAY_PATH, default `xray.exe` on PATH), proxy_links_file (FLOW_PROXY_LINKS, default
@@ -14,7 +15,12 @@ import json, os, pathlib, socket, subprocess, time, urllib.parse
 import config
 
 HERE = pathlib.Path(__file__).parent
-MODE = str(config.get('proxy', 'FLOW_PROXY', 'none')).strip()
+_m = config.get('proxy', 'FLOW_PROXY', 'none')
+MODES = [str(x).strip() for x in (_m if isinstance(_m, (list, tuple)) else str(_m).split(','))] or ['none']
+MODE = MODES[0]
+PROBE_S = int(config.get('proxy_probe_seconds', 'FLOW_PROXY_PROBE', 10))
+CACHE_S = 300
+_cache: tuple[float, str | None] | None = None
 XRAY = str(config.get('xray_path', 'FLOW_XRAY_PATH', 'xray.exe'))
 LINKS = pathlib.Path(str(config.get('proxy_links_file', 'FLOW_PROXY_LINKS', HERE / 'proxy_links.txt')))
 CONF = HERE / 'state' / 'xray.json'
@@ -52,9 +58,10 @@ def _listening() -> bool:
         return s.connect_ex(('127.0.0.1', PORT)) == 0
 
 
-def _works() -> bool:
-    """Flow answers through the proxy within 30 s."""
-    r = subprocess.run(['curl', '-s', '-o', 'NUL', '-m', '30', '-x', URL, '-w', '%{http_code}', 'https://flow.google.com/'],
+def _works(url: str | None = URL, limit: int | None = None) -> bool:
+    """Flow answers 200 through `url` (None = direct) within `limit` seconds (default PROBE_S)."""
+    r = subprocess.run(['curl', '-s', '-o', 'NUL', '-m', str(limit or PROBE_S), *(['-x', url] if url else []),
+                        '-w', '%{http_code}', 'https://flow.google.com/'],
                        capture_output=True, text=True, creationflags=0x08000000)
     return r.stdout.strip() == '200'
 
@@ -75,20 +82,49 @@ def _order(n: int) -> list[int]:
 
 
 def ensure(index: int | None = None) -> str | None:
-    """Return the proxy URL to use, or None for a direct connection. In xray mode: start xray on PORT unless
-    something already listens there; without an index, try the links in proxy_order until Flow answers."""
-    if MODE.lower() in ('', 'none', 'off', 'direct'):
+    """Return the proxy URL to use, or None for a direct connection. With one mode it is used as before; with a
+    list, the first mode that reaches Flow within PROBE_S seconds wins (result kept CACHE_S seconds)."""
+    global _cache
+    if index is not None:
+        return _xray(index)
+    if len(MODES) == 1:
+        return _one(MODES[0], probe=False)
+    if _cache and time.time() - _cache[0] < CACHE_S:
+        return _cache[1]
+    for m in MODES:
+        try:
+            u = _one(m, probe=True)
+        except RuntimeError:
+            continue
+        _cache = (time.time(), u)
+        return u
+    raise RuntimeError(f'no proxy mode in {MODES} reaches flow.google.com')
+
+
+def _one(mode: str, probe: bool) -> str | None:
+    low = mode.lower()
+    if low in ('', 'none', 'off', 'direct'):
+        if probe and not _works(None):
+            raise RuntimeError('direct connection does not reach Flow')
         return None
-    if MODE.lower().startswith(('http://', 'https://')):
-        return MODE
-    if MODE.lower() != 'xray':
-        raise RuntimeError(f"unknown proxy mode {MODE!r}: use none, xray or http://host:port")
-    if _listening():
-        return URL
+    if low.startswith(('http://', 'https://')):
+        if probe and not _works(mode):
+            raise RuntimeError(f'{mode} does not reach Flow')
+        return mode
+    if low != 'xray':
+        raise RuntimeError(f"unknown proxy mode {mode!r}: use none, xray or http://host:port")
+    return _xray(None, probe)
+
+
+def _xray(index: int | None, probe: bool = False) -> str | None:
+    if index is None and _listening():
+        if not probe or _works():
+            return URL
+        stop()  # a running copy that is too slow: rebuild it from the links below
     if index is None:
         for i in _order(len(_links())):
             try:
-                ensure(i)
+                _xray(i)
                 if _works():
                     return URL
             except (RuntimeError, IndexError, ValueError, OSError):

@@ -31,7 +31,8 @@ Every key can be set as an environment variable (wins) or in `config.local.json`
 | Key / env var | Meaning | Default |
 |---|---|---|
 | `profile` / `FLOW_PROFILE` | Chrome profile folder signed in to Flow | gflow-cli's default profile, else `state/chrome-profile` |
-| `proxy` / `FLOW_PROXY` | `none`, `xray`, or `http://host:port` of your own proxy | `none` |
+| `proxy` / `FLOW_PROXY` | `none`, `xray`, or `http://host:port` of your own proxy; or a list tried in order, e.g. `["http://127.0.0.1:10808", "xray"]` or `"http://127.0.0.1:10808,xray"`: the first that reaches Flow fast wins (a slow running xray is rebuilt from the next link) | `none` |
+| `proxy_probe_seconds` / `FLOW_PROXY_PROBE` | list mode: a proxy must reach Flow within this many seconds | `10` |
 | `xray_path` / `FLOW_XRAY_PATH` | `xray.exe` (xray mode) | `xray.exe` on PATH |
 | `proxy_links_file` / `FLOW_PROXY_LINKS` | file with one `trojan://` or `vless://` link per line (secret) | `proxy_links.txt` here |
 | `proxy_order` / `FLOW_PROXY_ORDER` | 0-based link indexes to try, e.g. `[2,0,1]` or `"2,0,1"` | all, in file order |
