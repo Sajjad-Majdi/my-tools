@@ -229,8 +229,8 @@ export const register: Register = on => {
 
     const row = (key: string, left: string, right: string, leftColor = '#e6e6e6', rightColor = '#9a9a9a') => (
       <Box key={key} flexDirection="row" justifyContent="space-between" gap={4}>
-        <Text color={leftColor}>{left}</Text>
-        <Text color={rightColor}>{right}</Text>
+        <Box flexShrink={1} minWidth={0}><Text color={leftColor} wrap="truncate-end">{left}</Text></Box>
+        <Box flexShrink={0}><Text color={rightColor} wrap="truncate-end">{right}</Text></Box>
       </Box>
     )
     const head = (title: string, right: string) => (
@@ -242,7 +242,7 @@ export const register: Register = on => {
     const chip = (id: string, label: string, color: string, card: unknown) => (
       <Box key={`chip-${id}`} position="relative" flexDirection="row" paddingX={1} paddingY={0.4} backgroundColor="#262626" hover={{ backgroundColor: '#333333' }}>
         <Text color={color}>{label}</Text>
-        <Box position="absolute" bottom={1} right={0} display="none" hover={{ display: 'flex' }} flexDirection="column" paddingX={2} paddingY={1} borderStyle="round" borderColor="#3d3d3d" backgroundColor="#262626">
+        <Box position="absolute" bottom={1} right={0} display="none" hover={{ display: 'flex' }} flexDirection="column" minWidth={58} paddingX={2} paddingY={1} borderStyle="round" borderColor="#3d3d3d" backgroundColor="#262626">
           {card}
         </Box>
       </Box>
