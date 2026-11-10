@@ -29,6 +29,8 @@ def _call(fn_name: str, *args):
         _flow = Flow()
     try:
         return getattr(_flow, fn_name)(*args)
+    except Exception as e:  # noqa: BLE001  the MCP layer hides exception text, so hand it back as data
+        return {'ERROR': f'{type(e).__name__}: {e}'[:2000]}
     finally:
         _timer = threading.Timer(IDLE_S, _idle_close)
         _timer.daemon = True
@@ -124,8 +126,8 @@ async def flow_generate_image(project_id: str, prompt: str, model: str | None = 
     """Generate images in a project with Flow's direct composer (Flow's agent is switched off).
     model: a family name from flow_models image list, e.g. "Nano Banana Pro", "Nano Banana 2.1", "Nano Banana 2 Lite".
     aspect: 16:9, 4:3, 1:1, 3:4 or 9:16. count: 1-4. quality: Low, Medium or High (when the model offers it).
-    references: media ids already in this project (upload files first with flow_upload_ingredient).
-    Images cost 0 credits. Returns the new media (ids, status, dims, signed URL), the submit's real model key,
+    references: media ids already in this project (upload files first with flow_upload_ingredient) and/or
+    "char:<Character name>". The prompt is sent as ONE line. Images cost 0 credits. Returns the new media (ids, status, dims, signed URL), the submit's real model key,
     and credits before/after. Download with flow_download."""
     return await run('generate', project_id, prompt, 'image', model, aspect, count, quality, None, None,
                      references or [], None, None, wait)
@@ -136,34 +138,40 @@ async def flow_generate_video(project_id: str, prompt: str, model: str | None = 
                               seconds: int | None = None, resolution: str | None = None, count: int = 1,
                               references: list[str] | None = None, start_frame: str | None = None,
                               end_frame: str | None = None, wait: bool = True, timeout_s: float = 1200,
-                              max_credits: int | None = None) -> dict:
+                              max_credits: int | None = None, dry_run: bool = False) -> dict:
     """Generate videos in a project with Flow's direct composer (agent off). SPENDS CREDITS: check flow_models
     for the cost of each model key and flow_credits first.
     model: video family from flow_models, e.g. "Omni 1.2 Flash" (key macaron_cookie, 3-15 s), "Omni 1.1 Flash", "Veo 3.1 - Lite", "Veo 3.1 - Fast", "Veo 3.1 - Quality".
     aspect: 16:9 or 9:16. seconds: 4, 6, 8 or 10; Omni 1.2 also 3-15 (as the model offers). resolution: 360p or 720p (Omni).
-    count: 1-4 (each one is billed). references: project media ids as ingredients (Ingredients mode).
+    count: 1-4 (each one is billed). references: project media ids and/or "char:<Character name>" (Flow
+    characters/avatars, see flow_list_characters) as ingredients (Ingredients mode).
+    The prompt is always sent as ONE line (Enter submits in Flow; newlines once cost 8x). Before Start, the tool
+    checks the composer holds exactly the asked ingredients and the exact prompt text, else it submits nothing.
+    dry_run=True: do everything except Start (0 credits); returns planned_credits, settings, composer_check, screenshot.
+    Always dry-run a new prompt first. A result with ERROR means the call failed; WARNING means check credits.
     start_frame / end_frame: project media ids (Frames mode; references are then ignored by Flow).
     Omni 1.2 uses a Length slider: any whole number 3-15 works. max_credits: refuse (submit nothing) if Flow's own
     "Generating will use N credits" line is higher. Returns new media with status, planned_credits, the submit's
     real model key (e.g. abra_t2v_4s_360p) and credits spent."""
     return await run('generate', project_id, prompt, 'video', model, aspect, count, None, resolution, seconds,
-                     references or [], start_frame, end_frame, wait, timeout_s, max_credits)
+                     references or [], start_frame, end_frame, wait, timeout_s, max_credits, dry_run)
 
 
 @mcp.tool()
-async def flow_upscale(project_id: str, media_id: str, target: str, path: str) -> dict:
+async def flow_upscale(project_id: str, media_id: str, target: str, path: str, max_credits: int = 0) -> dict:
     """Upscale a finished video through its media page's Download menu and save the file to path.
     target: what the menu offers for that clip, e.g. "720p" for an Omni 360p clip, "1080p" or "4K" for 720p clips.
-    Cost per flow_models: Omni 360p->720p and Veo 1080p upsamplers 0 credits, Veo 4K 50."""
-    return await run('upscale', project_id, media_id, target, path)
+    A priced menu item (e.g. "720p Upscaled · 4 credits" on extended chains) is refused unless max_credits covers it.
+    Flow upscales only 3-15 s, and the media page holds the WHOLE chain of an extended clip."""
+    return await run('upscale', project_id, media_id, target, path, 1200, max_credits)
 
 
 @mcp.tool()
 async def flow_edit_video(project_id: str, media_id: str, instruction: str, wait: bool = True,
-                          max_credits: int | None = None) -> dict:
+                          max_credits: int | None = None, dry_run: bool = False) -> dict:
     """Edit an existing video with Omni ("Describe how to edit this video"), e.g. change a color, remove an object.
     SPENDS CREDITS (flow_models: abra_edit 20, abra_edit_360p 10). Returns the new media and credits before/after."""
-    return await run('edit_video', project_id, media_id, instruction, wait, 1200, max_credits)
+    return await run('edit_video', project_id, media_id, instruction, wait, 1200, max_credits, dry_run)
 
 
 @mcp.tool()
@@ -227,10 +235,11 @@ async def flow_add_scene_clip(project_id: str, scene_id: str, media_id: str, pos
 
 @mcp.tool()
 async def flow_extend_video(project_id: str, media_id: str, prompt: str, seconds: int = 4, wait: bool = True,
-                            max_credits: int | None = None) -> dict:
+                            max_credits: int | None = None, dry_run: bool = False) -> dict:
     """Extend a video with Omni ("Add clip" -> "Extend", prompt = what happens next, seconds 3-10).
-    SPENDS CREDITS: set max_credits; the tool refuses before submitting if Flow's own price line is higher."""
-    return await run('extend_video', project_id, media_id, prompt, seconds, wait, 1200, max_credits)
+    SPENDS CREDITS: set max_credits; the tool refuses before submitting if Flow's own price line is higher.
+    The prompt is sent as ONE line and checked in the box before the single submit. dry_run=True stops before it."""
+    return await run('extend_video', project_id, media_id, prompt, seconds, wait, 1200, max_credits, dry_run)
 
 
 @mcp.tool()

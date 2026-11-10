@@ -247,19 +247,26 @@ class Flow:
 
     @staticmethod
     def _radio(pg, name: str):
-        r = pg.get_by_role('radio', name=name, exact=True)
+        # only VISIBLE radios: the panel keeps hidden toggle groups too (e.g. a hidden "9:16" for the other
+        # media type), and clicking a hidden one times out (2026-11-10)
+        r = pg.get_by_role('radio', name=name, exact=True).filter(visible=True)
         if not r.count():  # some radios carry an icon word in their text, e.g. "360p info"
-            r = pg.locator('[role=radio]').filter(has_text=re.compile(rf'^\s*{re.escape(name)}'))
+            r = pg.locator('[role=radio]:visible').filter(has_text=re.compile(rf'^\s*{re.escape(name)}'))
         if not r.count():
             have = [' '.join(t.split()) for t in pg.locator('[role=radio]').all_inner_texts()]
             pg.keyboard.press('Escape')
             raise FlowError(f'option "{name}" is not offered for this model/mode; panel has {have}')
+        if r.first.get_attribute('aria-checked') == 'true':
+            return  # already set; clicking could also hit a hover card lying over it
+        pg.mouse.move(5, 5); pg.wait_for_timeout(300)  # drop hover cards (e.g. a model's info popover)
         r.first.click(); pg.wait_for_timeout(400)
 
     @staticmethod
     def _length(pg, seconds: int):
         """Set the Omni 1.2 "Length" slider (3-15 s) with the keyboard and verify the label."""
         sl = pg.get_by_label('Length', exact=True)
+        if not sl.count():  # the Extend panel names it "Extend Length" (2026-11-10)
+            sl = pg.get_by_label('Extend Length', exact=True)
         if not sl.count():
             pg.keyboard.press('Escape')
             raise FlowError(f'no "{seconds}s" option and no Length slider for this model')
@@ -286,24 +293,135 @@ class Flow:
             pg.wait_for_timeout(700)
         raise FlowError(f'{what} not found in the picker')
 
+    # ---- composer safety (2026-11-10: a multi-line prompt became 8 paid submits, Enter = submit) ----
+    PROMPT_BOX = '[aria-label="What do you want to create?"]'
+
+    @staticmethod
+    def _flat(text: str) -> str:
+        """The composer sends on Enter, so a prompt must be ONE line: collapse every newline/whitespace run."""
+        return ' '.join((text or '').split())
+
+    @classmethod
+    def _composer(cls, pg) -> dict:
+        """What the main composer holds now: character chips, image chips, typed text."""
+        return pg.evaluate("""(sel) => {
+          const box = document.querySelector(sel);
+          if (!box) return {chars: -1, images: -1, text: null};
+          let c = box; for (let i = 0; i < 6 && c && !c.classList.contains('prompt-box-content'); i++) c = c.parentElement;
+          const alts = [...(c || box).querySelectorAll('img.chip-image')].map(i => i.alt || '');
+          return {chars: alts.filter(a => /character/i.test(a)).length,
+                  images: alts.filter(a => !/character/i.test(a)).length,
+                  text: (box.innerText || '').replace(/\\s+/g, ' ').trim()};
+        }""", cls.PROMPT_BOX)
+
+    @classmethod
+    def _clear_composer(cls, pg):
+        """Remove stale text and ingredient chips left from an earlier run, and prove the box is empty."""
+        for _ in range(3):
+            st = cls._composer(pg)
+            if st['chars'] == 0 and st['images'] == 0 and not st['text']:
+                return
+            b = pg.locator('[aria-label="Clear prompt"]:visible')
+            if b.count():
+                b.first.click(); pg.wait_for_timeout(800)
+            chips = pg.locator('.prompt-box-content button.chip-container:visible')
+            for _ in range(chips.count()):
+                chips.first.click(); pg.wait_for_timeout(500)
+            st = cls._composer(pg)
+            if st['text']:
+                pg.locator(cls.PROMPT_BOX).click()
+                pg.keyboard.press('Control+A'); pg.keyboard.press('Delete'); pg.wait_for_timeout(400)
+        st = cls._composer(pg)
+        if st['chars'] or st['images'] or st['text']:
+            raise FlowError(f'could not clear the composer before use: {st}')
+
+    @staticmethod
+    def _picker_open(pg) -> bool:
+        return pg.locator('[role=option].asset-item').count() > 0
+
+    @classmethod
+    def _add_character(cls, pg, name: str):
+        """Add a Flow character (avatar) as an ingredient. A Character row is added at once and closes the picker."""
+        if not cls._picker_open(pg):
+            pg.get_by_label('Add ingredients to the prompt box').click(); pg.wait_for_timeout(2500)
+        search = pg.get_by_placeholder('Search assets')
+        if search.count():
+            search.first.fill(name); pg.wait_for_timeout(2000)
+        for _ in range(20):
+            rows = pg.locator('[role=option].asset-item')
+            for i in range(rows.count()):
+                lines = [x.strip() for x in rows.nth(i).inner_text().split('\n') if x.strip()]
+                if lines and lines[0] == name and 'Character' in lines:
+                    rows.nth(i).click(); pg.wait_for_timeout(1200)
+                    if cls._picker_open(pg):  # older behaviour: needs the button
+                        btn = pg.get_by_role('button', name='Add to prompt')
+                        if btn.count():
+                            btn.click(); pg.wait_for_timeout(1200)
+                    return
+            pg.wait_for_timeout(700)
+        pg.keyboard.press('Escape')
+        raise FlowError(f'character "{name}" not found in the ingredients picker')
+
+    @classmethod
+    def _add_image(cls, pg, tokens: list[str], what: str):
+        """Add one project image as an ingredient: pick its row, then "Add to prompt"."""
+        if not cls._picker_open(pg):
+            pg.get_by_label('Add ingredients to the prompt box').click(); pg.wait_for_timeout(2500)
+        search = pg.get_by_placeholder('Search assets')
+        if search.count() and search.first.input_value():
+            search.first.fill(''); pg.wait_for_timeout(1500)
+        cls._pick(pg, tokens, what)
+        pg.wait_for_timeout(800)
+        # generated images only preview and need "Add to prompt"; some rows (uploads) are added at once and the
+        # picker closes. The composer chip check before Start proves the result either way.
+        btn = pg.get_by_role('button', name='Add to prompt')
+        if cls._picker_open(pg) and btn.count():
+            btn.click(); pg.wait_for_timeout(1500)
+
+    def _dry_shot(self, pg, tag: str) -> str:
+        d = pathlib.Path(__file__).resolve().parent / 'state'
+        d.mkdir(exist_ok=True)
+        p = d / f'dryrun_{tag}_{time.strftime("%Y%m%d_%H%M%S")}.png'
+        pg.screenshot(path=str(p))
+        return str(p)
+
     def generate(self, project_id: str, prompt: str, kind: str = 'image', model: str | None = None,
                  aspect: str = '16:9', count: int = 1, quality: str | None = None, resolution: str | None = None,
                  seconds: int | None = None, references: list[str] | None = None, start_frame: str | None = None,
                  end_frame: str | None = None, wait: bool = True, timeout_s: float = 900,
-                 max_credits: int | None = None) -> dict:
+                 max_credits: int | None = None, dry_run: bool = False) -> dict:
         """Generate images or videos with Flow's direct composer (agent off). The page builds and sends the
-        submit itself, exactly as when a person clicks; we only set the controls and read results back."""
+        submit itself, exactly as when a person clicks; we only set the controls and read results back.
+        references: project media ids and/or "char:<Character name>" (Flow characters / avatars).
+        The prompt is sent as ONE line (Enter would submit). Before submitting, the composer is checked:
+        exactly the asked chips and exactly the prompt text, else nothing is sent.
+        dry_run: do everything except pressing Start; returns planned credits, settings, the composer check
+        and a screenshot path, then clears the composer. Spends nothing."""
         kind = kind.lower()
         if kind not in ('image', 'video'):
             raise FlowError('kind must be image or video')
+        prompt = self._flat(prompt)
+        if not prompt:
+            raise FlowError('empty prompt')
         refs = references or []
+        chars = [r[5:].strip() for r in refs if r.startswith('char:')]
+        refs = [r for r in refs if not r.startswith('char:')]
         frames = [m for m in (start_frame, end_frame) if m]
+        if frames and (refs or chars):
+            raise FlowError('start/end frames (Frames mode) cannot be mixed with references or characters')
         bal0 = self.credits()['balance']
         need = refs + frames
         media0 = {m['media_id']: m for m in self.list_media(project_id)} if need else {}
         missing = [m for m in need if m not in media0]
         if missing:
             raise FlowError(f'media not in project {project_id}: {missing}')
+        for m in need:  # newer media are matched by id in the picker's thumbnail URL
+            media0[m]['thumb_tokens'] = list(media0[m].get('thumb_tokens') or []) + [m]
+        if chars:
+            have = {c['name'] for c in self.list_characters(project_id)}
+            unknown = [c for c in chars if c not in have]
+            if unknown:
+                raise FlowError(f'characters not in project {project_id}: {unknown}; it has {sorted(have)}')
         submits: list[dict] = []
         with self._lock:
             pg = self._open_project(project_id)
@@ -345,6 +463,7 @@ class Flow:
                         pg.keyboard.press('Escape')
                         raise FlowError(f'model "{model}" not offered; menu has {names}')
                     items.nth(hit[0]).click(); pg.wait_for_timeout(800)
+                    pg.mouse.move(5, 5); pg.wait_for_timeout(500)  # close the model's hover card
                 self._radio(pg, aspect)
                 if kind == 'image' and quality:
                     self._radio(pg, quality.capitalize())
@@ -366,11 +485,16 @@ class Flow:
                 pg.keyboard.press('Escape'); pg.wait_for_timeout(800)
                 settings = pg.get_by_label('Settings trigger').inner_text().replace('\n', ' ').replace('\U0001F34C', '').strip()
 
-                if refs:
-                    pg.get_by_label('Add ingredients to the prompt box').click(); pg.wait_for_timeout(2500)
-                    for m in refs:
-                        self._pick(pg, media0[m]['thumb_tokens'], f'reference {m}')
-                    pg.get_by_role('button', name='Add to prompt').click(); pg.wait_for_timeout(1500)
+                if not frames:
+                    self._clear_composer(pg)
+                else:  # Frames mode: best-effort clear of a stale prompt / frames; the check below still guards
+                    b = pg.locator('[aria-label="Clear prompt"]:visible')
+                    if b.count():
+                        b.first.click(); pg.wait_for_timeout(800)
+                for c in chars:  # characters first: each one closes the picker
+                    self._add_character(pg, c)
+                for m in refs:   # then images, one "Add to prompt" each
+                    self._add_image(pg, media0[m]['thumb_tokens'], f'reference {m}')
                 for slot, m in (('Start', start_frame), ('End', end_frame)):
                     if m:
                         pg.get_by_text(slot, exact=True).last.click(); pg.wait_for_timeout(2500)
@@ -379,20 +503,40 @@ class Flow:
                             pg.get_by_role('button', name='Add to prompt').click()
                         pg.wait_for_timeout(1500)
 
-                box = pg.get_by_label('What do you want to create?')
-                box.click(); pg.keyboard.type(prompt, delay=3); pg.wait_for_timeout(600)
+                box = pg.locator(self.PROMPT_BOX)
+                box.click(); pg.keyboard.type(prompt, delay=3); pg.wait_for_timeout(800)
+                st = self._composer(pg)
+                check = {'characters': st['chars'], 'images': st['images'],
+                         'expected_characters': len(chars), 'expected_images': len(refs) + len(frames),
+                         'text_ok': st['text'] == prompt}
+                ok = check['text_ok'] and st['chars'] == len(chars) and st['images'] == len(refs) + len(frames)
+                if dry_run or not ok:
+                    shot = self._dry_shot(pg, 'generate')
+                    b = pg.locator('[aria-label="Clear prompt"]:visible')
+                    if frames and b.count():
+                        b.first.click(); pg.wait_for_timeout(800)
+                    elif not frames:
+                        self._clear_composer(pg)
+                    if not ok:
+                        raise FlowError(f'composer check failed, NOTHING was submitted: {check}; typed {st["text"]!r}; screenshot {shot}')
+                    return {'dry_run': True, 'project_id': project_id, 'settings': settings, 'planned_credits': planned,
+                            'composer_check': check, 'prompt_sent': prompt, 'screenshot': shot, 'credits_before': bal0}
                 pg.get_by_label('Start generation').click()
                 t_submit = t0 = time.time()
-                while not submits and time.time() - t0 < 180:
+                while not submits and time.time() - t0 < 600:  # the extend/edit reply can take minutes (2026-11-10)
                     pg.wait_for_timeout(1000)
+                pg.wait_for_timeout(8000)  # catch any extra submit (should never happen now)
             finally:
                 pg.remove_listener('response', on_resp)
         if not submits:
-            raise FlowError('no submit reply seen within 180 s (outcome unknown: check flow_list_media before retrying)')
+            raise FlowError('no submit reply seen within 600 s (outcome unknown: check flow_list_media before retrying)')
         sub = submits[0]
         if sub.get('errors'):
             raise FlowError(f'Flow refused the submit: {sub["errors"]} (if UNUSUAL_ACTIVITY: Google flagged the browser; stop)')
-        out = {'project_id': project_id, 'settings': settings, 'planned_credits': planned, 'submit': sub, 'credits_before': bal0}
+        out = {'project_id': project_id, 'settings': settings, 'planned_credits': planned, 'submit': sub, 'credits_before': bal0,
+               'composer_check': check}
+        if len(submits) > 1:
+            out['WARNING'] = f'{len(submits)} submits seen for one call: {submits[1:]}'
         t0 = time.time()
         ids = sub.get('media_ids') or []
         if not ids:  # fall back to the (large) project listing: media created since the submit
@@ -409,6 +553,9 @@ class Flow:
             out['media'] = [self.get_media(project_id, i) for i in ids]
         out['credits_after'] = self.credits()['balance']
         out['credits_spent'] = out['credits_before'] - out['credits_after']
+        if planned is not None and out['credits_spent'] > planned:
+            out['WARNING'] = (out.get('WARNING', '') + f' spent {out["credits_spent"]} > planned {planned} '
+                              '(another session may also be spending; check flow_list_media)').strip()
         for m in out['media']:
             m.pop('thumb_tokens', None)
         return out
@@ -427,9 +574,12 @@ class Flow:
         pg.wait_for_timeout(2500)
         return pg, m
 
-    def upscale(self, project_id: str, media_id: str, target: str, path: str, timeout_s: float = 1200) -> dict:
+    def upscale(self, project_id: str, media_id: str, target: str, path: str, timeout_s: float = 1200,
+                max_credits: int = 0) -> dict:
         """Upscale a video (or image) through the media page's own Download menu, e.g. "720p" for an Omni 360p clip,
-        "1080p"/"4K" for 720p clips (cost per flow_models: Omni/Veo 1080p upsamplers 0, Veo 4K 50), and save it."""
+        "1080p"/"4K" for 720p clips, and save it. The menu item can carry a price ("720p Upscaled · 4 credits", seen
+        on extended chains, 2026-11-10); it is refused unless max_credits covers it. The page upscales the WHOLE
+        chain (workflow) shown on the media page, and only for 3-15 s."""
         bal0 = self.credits()['balance']
         with self._lock:
             pg, m = self._open_media(project_id, media_id)
@@ -440,6 +590,13 @@ class Flow:
             if not hit:
                 pg.keyboard.press('Escape')
                 raise FlowError(f'"{target}" not offered; menu has {names}')
+            if items.nth(hit[0]).get_attribute('disabled') is not None:
+                pg.keyboard.press('Escape')
+                raise FlowError(f'"{names[hit[0]]}" is disabled here (Flow upscales only 3-15 s; the page shows the whole chain)')
+            price = re.search(r'(\d+)\s*credits?', names[hit[0]])
+            if price and int(price.group(1)) > max_credits:
+                pg.keyboard.press('Escape')
+                raise FlowError(f'"{names[hit[0]]}" costs {price.group(1)} credits > max_credits={max_credits}; nothing was spent')
             out = pathlib.Path(path)
             with pg.expect_download(timeout=timeout_s * 1000) as dl:
                 items.nth(hit[0]).click()
@@ -452,9 +609,13 @@ class Flow:
                 'credits_before': bal0, 'credits_after': self.credits()['balance']}
 
     def edit_video(self, project_id: str, media_id: str, instruction: str, wait: bool = True, timeout_s: float = 1200,
-                   max_credits: int | None = None) -> dict:
+                   max_credits: int | None = None, dry_run: bool = False) -> dict:
         """Omni video edit ("Describe how to edit this video") on the media page. SPENDS CREDITS
-        (flow_models: abra_edit 20, abra_edit_360p 10). Returns the new media."""
+        (flow_models: abra_edit 20, abra_edit_360p 10). Returns the new media.
+        The instruction is sent as ONE line and checked in the box before the single Enter. dry_run: stop before Enter."""
+        instruction = self._flat(instruction)
+        if not instruction:
+            raise FlowError('empty instruction')
         bal0 = self.credits()['balance']
         submits: list[dict] = []
         with self._lock:
@@ -486,16 +647,27 @@ class Flow:
                     pg.keyboard.press('Escape'); pg.wait_for_timeout(600)
                     if m_ and int(m_.group(1)) > max_credits:
                         raise FlowError(f'Flow would charge {m_.group(1)} credits, above max_credits={max_credits}; nothing was submitted')
-                pg.locator('.prosemirror-editor').last.click()
-                pg.keyboard.type(instruction, delay=3); pg.wait_for_timeout(600)
-                pg.keyboard.press('Enter')
+                ed = pg.locator('.prosemirror-editor:visible').last
+                ed.click()
+                pg.keyboard.press('Control+A'); pg.keyboard.press('Delete')
+                pg.keyboard.type(instruction, delay=3); pg.wait_for_timeout(800)
+                typed = ' '.join((ed.inner_text() or '').split())
+                if dry_run or typed != instruction:
+                    shot = self._dry_shot(pg, 'edit')
+                    pg.keyboard.press('Control+A'); pg.keyboard.press('Delete'); pg.keyboard.press('Escape')
+                    if typed != instruction:
+                        raise FlowError(f'edit text check failed, NOTHING was submitted; typed {typed!r}; screenshot {shot}')
+                    return {'dry_run': True, 'instruction_sent': instruction, 'text_ok': True, 'screenshot': shot,
+                            'credits_before': bal0}
+                pg.keyboard.press('Enter')  # the single submit; the instruction itself has no newline
                 t0 = time.time()
-                while not submits and time.time() - t0 < 180:
+                while not submits and time.time() - t0 < 600:  # the extend/edit reply can take minutes (2026-11-10)
                     pg.wait_for_timeout(1000)
+                pg.wait_for_timeout(8000)  # catch any extra submit
             finally:
                 pg.remove_listener('response', on_resp)
         if not submits:
-            raise FlowError('no edit submit seen within 180 s (outcome unknown: check flow_list_media before retrying)')
+            raise FlowError('no edit submit seen within 600 s (outcome unknown: check flow_list_media before retrying)')
         sub = submits[0]
         if sub['errors']:
             raise FlowError(f'Flow refused the edit: {sub["errors"]}')
@@ -505,9 +677,13 @@ class Flow:
         return {'submit': sub, 'media': res, 'credits_before': bal0, 'credits_after': self.credits()['balance']}
 
     def extend_video(self, project_id: str, media_id: str, prompt: str, seconds: int = 4, wait: bool = True,
-                     timeout_s: float = 1200, max_credits: int | None = None) -> dict:
+                     timeout_s: float = 1200, max_credits: int | None = None, dry_run: bool = False) -> dict:
         """Extend a video ("Add clip" -> "Extend" -> "What happens next?") on the media page. SPENDS CREDITS
-        (the page shows "Generating will use N credits"; max_credits refuses before submitting). Returns the new media."""
+        (the page shows "Generating will use N credits"; max_credits refuses before submitting). Returns the new media.
+        The prompt is sent as ONE line and checked in the box before the single Enter. dry_run: stop before Enter."""
+        prompt = self._flat(prompt)
+        if not prompt:
+            raise FlowError('empty prompt')
         bal0 = self.credits()['balance']
         submits: list[dict] = []
         with self._lock:
@@ -543,23 +719,43 @@ class Flow:
                     pg.keyboard.press('Escape')
                     raise FlowError(f'Flow would charge {planned} credits, above max_credits={max_credits}; nothing was submitted')
                 pg.keyboard.press('Escape'); pg.wait_for_timeout(800)
-                pg.locator('.prosemirror-editor').last.click()
-                pg.keyboard.type(prompt, delay=3); pg.wait_for_timeout(600)
-                pg.keyboard.press('Enter')
+                ed = pg.locator('.prosemirror-editor:visible').last
+                ed.click()
+                pg.keyboard.press('Control+A'); pg.keyboard.press('Delete')
+                pg.keyboard.type(prompt, delay=3); pg.wait_for_timeout(800)
+                typed = ' '.join((ed.inner_text() or '').split())
+                if dry_run or typed != prompt:
+                    shot = self._dry_shot(pg, 'extend')
+                    pg.keyboard.press('Control+A'); pg.keyboard.press('Delete'); pg.keyboard.press('Escape')
+                    if typed != prompt:
+                        raise FlowError(f'extend text check failed, NOTHING was submitted; typed {typed!r}; screenshot {shot}')
+                    return {'dry_run': True, 'planned_credits': planned, 'prompt_sent': prompt, 'text_ok': True,
+                            'screenshot': shot, 'credits_before': bal0}
+                pg.keyboard.press('Enter')  # the single submit; the prompt itself has no newline
                 t0 = time.time()
-                while not submits and time.time() - t0 < 180:
+                while not submits and time.time() - t0 < 600:  # the extend/edit reply can take minutes (2026-11-10)
                     pg.wait_for_timeout(1000)
+                pg.wait_for_timeout(8000)  # catch any extra submit
             finally:
                 pg.remove_listener('response', on_resp)
         if not submits:
-            raise FlowError('no extend submit seen within 180 s (outcome unknown: check flow_list_media before retrying)')
+            raise FlowError('no extend submit seen within 600 s (outcome unknown: check flow_list_media before retrying)')
         sub = submits[0]
         if sub['errors']:
             raise FlowError(f'Flow refused the extend: {sub["errors"]}')
         res = [self.wait_media(project_id, i, timeout_s) if wait else self.get_media(project_id, i) for i in sub['media_ids']]
         for r in res:
             r.pop('thumb_tokens', None)
-        return {'submit': sub, 'planned_credits': planned, 'media': res, 'credits_before': bal0, 'credits_after': self.credits()['balance']}
+        out = {'submit': sub, 'planned_credits': planned, 'media': res, 'credits_before': bal0, 'credits_after': self.credits()['balance']}
+        out['credits_spent'] = bal0 - out['credits_after']
+        warn = []
+        if len(submits) > 1:
+            warn.append(f'{len(submits)} submits seen for one call')
+        if planned is not None and out['credits_spent'] > planned:
+            warn.append(f'spent {out["credits_spent"]} > planned {planned}')
+        if warn:
+            out['WARNING'] = '; '.join(warn)
+        return out
 
     def add_scene_clip(self, project_id: str, scene_id: str, media_id: str, position: int = 0) -> dict:
         """Add a video of the project to a scene's timeline (Flow copies it as a new clip). Free."""

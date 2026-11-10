@@ -48,9 +48,10 @@ def main(argv=None) -> int:
     p = sub.add_parser('upload'); p.add_argument('project'); p.add_argument('file')
     p = sub.add_parser('upscale'); p.add_argument('project'); p.add_argument('media'); p.add_argument('target'); p.add_argument('path')
     p = sub.add_parser('edit'); p.add_argument('project'); p.add_argument('media'); p.add_argument('instruction')
-    p.add_argument('--max-credits', type=int)
+    p.add_argument('--max-credits', type=int); p.add_argument('--dry-run', action='store_true')
     p = sub.add_parser('extend'); p.add_argument('project'); p.add_argument('media'); p.add_argument('prompt')
     p.add_argument('--seconds', type=int, default=4); p.add_argument('--max-credits', type=int)
+    p.add_argument('--dry-run', action='store_true')
     p = sub.add_parser('scene-clip'); p.add_argument('project'); p.add_argument('scene'); p.add_argument('media')
     p.add_argument('--position', type=int, default=0)
     p = sub.add_parser('assets'); p.add_argument('project')
@@ -77,7 +78,7 @@ def main(argv=None) -> int:
             p.add_argument('--quality')
         else:
             p.add_argument('--seconds', type=int); p.add_argument('--resolution'); p.add_argument('--start'); p.add_argument('--end')
-            p.add_argument('--max-credits', type=int)
+            p.add_argument('--max-credits', type=int); p.add_argument('--dry-run', action='store_true')
     a = ap.parse_args(argv)
     if a.cmd == 'proxy-stop':
         proxy.stop(); print(json.dumps({'stopped': True})); return 0
@@ -94,8 +95,8 @@ def main(argv=None) -> int:
              'download': lambda: f.download(a.project, a.media, a.path),
              'upload': lambda: f.upload_ingredient(a.project, a.file),
              'upscale': lambda: f.upscale(a.project, a.media, a.target, a.path),
-             'edit': lambda: f.edit_video(a.project, a.media, a.instruction, max_credits=a.max_credits),
-             'extend': lambda: f.extend_video(a.project, a.media, a.prompt, a.seconds, max_credits=a.max_credits),
+             'edit': lambda: f.edit_video(a.project, a.media, a.instruction, max_credits=a.max_credits, dry_run=a.dry_run),
+             'extend': lambda: f.extend_video(a.project, a.media, a.prompt, a.seconds, max_credits=a.max_credits, dry_run=a.dry_run),
              'scene-clip': lambda: f.add_scene_clip(a.project, a.scene, a.media, a.position),
              'assets': lambda: f.project_assets(a.project),
              'characters': lambda: f.list_characters(a.project),
@@ -115,7 +116,8 @@ def main(argv=None) -> int:
                                          references=a.ref, wait=not a.no_wait),
              'video': lambda: f.generate(a.project, a.prompt, 'video', a.model, a.aspect, a.count, resolution=a.resolution,
                                          seconds=a.seconds, references=a.ref, start_frame=a.start, end_frame=a.end,
-                                         wait=not a.no_wait, max_credits=a.max_credits)}[a.cmd]()
+                                         wait=not a.no_wait, max_credits=a.max_credits,
+                                         dry_run=getattr(a, 'dry_run', False))}[a.cmd]()
         print(json.dumps(r, ensure_ascii=False, indent=1))
         return 0
     except FlowError as e:

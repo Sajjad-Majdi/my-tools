@@ -51,6 +51,22 @@ Secrets: `config.local.json`, `proxy_links.txt` (or the file `proxy_links_file` 
 ```
 `flow.py --help` lists all commands (projects, media, upload, upscale, edit, characters, scenes, collections). The MCP server exposes the same set as `flow_*` tools; `flow_models` shows live model keys and credit costs.
 
+## Spending safety (2026-11-10)
+
+- Flow's composer submits on Enter. A multi-line prompt typed as is became one paid generation PER LINE
+  (one 10-credit call cost 80). Every prompt/instruction is now flattened to ONE line before typing.
+- Before pressing Start, `generate` checks the composer: exactly the asked character chips, image chips and
+  prompt text. On any mismatch it submits nothing and returns an error with a screenshot (`state/`).
+  Stale chips/text from an earlier run are cleared first. `extend_video` and `edit_video` check the typed text too.
+- `dry_run=True` (CLI `--dry-run`) on generate / extend / edit does everything except the submit: it returns
+  planned credits, settings, the composer check and a screenshot. 0 credits. Dry-run every new prompt first.
+- Results carry `WARNING` when more than one submit was seen or credits spent > planned.
+- Tool failures come back as `{"ERROR": "..."}` (the MCP layer used to hide the message).
+- `references` accept `char:<Character name>` (Flow characters/avatars) next to media ids. A Character row in
+  the picker is added at once; images need "Add to prompt"; the tool handles both.
+- The Extend panel's slider is labelled "Extend Length"; handled.
+- Tested with dry runs on 2026-11-10 (multi-line prompt, 1-2 characters + image, unknown character, extend 7 s, edit): 0 credits spent.
+
 ## Notes
 - Put all media of one video in ONE project; every media call takes the project id.
 - Videos cost credits (Omni 1.1 Flash 4 s 360p = 4; Omni edit 10-20); check `credits` first and use `--max-credits` / `max_credits`.
