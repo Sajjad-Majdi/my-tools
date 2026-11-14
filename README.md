@@ -24,7 +24,7 @@ Replace `<tool>` with a folder name below (for example `flow-mcp`). Every value 
 | [idmdl](idmdl/) | Fast command line for Internet Download Manager (add, queue, status, stop) |
 | [flow-mcp](flow-mcp/) | Google Flow (image and video generation) as an MCP server |
 | [gemini-web](gemini-web/) | The Gemini web app from the command line, with your own account |
-| [gweb-agent](gweb-agent/) | A coding agent (mini-swe-agent) running on the Gemini web app with your own account, no API key |
+| [gemini-agent](gemini-agent/) | A coding agent (mini-swe-agent) for Gemini: the web app with your own account, the API as fallback |
 | [aparat](aparat/) | Upload and publish videos to your Aparat channel without a browser |
 
 ## Hosting

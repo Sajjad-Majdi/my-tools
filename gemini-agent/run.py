@@ -1,6 +1,6 @@
-"""Run mini-swe-agent on a task with a Gemini web model (your own Google login, no API key).
+"""Run mini-swe-agent on a task with Gemini: the web app (your own Google login) first, the Gemini API as fallback.
 
-    python run.py "task text" [--model gemini-4-hydrogen] [--cwd DIR] [--steps 30] [--out traj.json]
+    python run.py "task text" [--model gemini-4-hydrogen] [--backend auto|web|api] [--cwd DIR] [--steps 30] [--out traj.json]
 
 Commands run in bash (Git Bash on Windows), hidden, one at a time. Exit code 0 when the agent finished.
 """
@@ -19,9 +19,9 @@ import minisweagent
 import minisweagent.environments.local as local
 from minisweagent.agents.default import DefaultAgent
 from minisweagent.environments.local import LocalEnvironment
-from gweb_model import GwebModel
+from gemini_model import GeminiModel
 
-BASH = os.environ.get("GWEB_AGENT_BASH", r"C:\Program Files\Git\bin\bash.exe" if os.name == "nt" else "/bin/bash")
+BASH = os.environ.get("GEMINI_AGENT_BASH", r"C:\Program Files\Git\bin\bash.exe" if os.name == "nt" else "/bin/bash")
 
 
 def _run(command, cwd, env, timeout):
@@ -44,7 +44,9 @@ local._run = _run
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("task")
-    ap.add_argument("--model", default=os.environ.get("GWEB_AGENT_MODEL", "gemini-4-hydrogen"))
+    ap.add_argument("--model", default=os.environ.get("GEMINI_AGENT_MODEL", "gemini-4-hydrogen"))
+    ap.add_argument("--backend", default=os.environ.get("GEMINI_AGENT_BACKEND", "auto"), choices=["auto", "web", "api"])
+    ap.add_argument("--api-model", default=None, help="model id for the API fallback (default: same as --model)")
     ap.add_argument("--cwd", default=os.getcwd())
     ap.add_argument("--steps", type=int, default=30)
     ap.add_argument("--timeout", type=int, default=120, help="seconds per shell command")
@@ -58,10 +60,10 @@ def main():
     if a.out:
         agent_cfg["output_path"] = a.out
     model_cfg = {k: v for k, v in cfg.get("model", {}).items() if k not in ("model_name", "model_class", "model_kwargs")}
-    model = GwebModel(model_name=a.model, **model_cfg)
+    model = GeminiModel(model_name=a.model, backend=a.backend, api_model=a.api_model, **model_cfg)
     env = LocalEnvironment(cwd=a.cwd, timeout=a.timeout)
     result = DefaultAgent(model, env, **agent_cfg).run(task=a.task)
-    print("EXIT", result.get("exit_status"), flush=True)
+    print("EXIT", result.get("exit_status"), "| backend:", model.used, flush=True)
     print(str(result.get("submission", ""))[:4000])
     return 0 if str(result.get("exit_status", "")).lower() in ("submitted", "completed") else 1
 
