@@ -26,5 +26,10 @@ Replace `<tool>` with a folder name below (for example `flow-mcp`). Every value 
 | [gemini-web](gemini-web/) | The Gemini web app from the command line, with your own account |
 | [aparat](aparat/) | Upload and publish videos to your Aparat channel without a browser |
 
+## Hosting
+| Tool | What it does |
+|---|---|
+| [runflare-api](runflare-api/) | The full Runflare panel API from the command line (projects, apps, env vars, volumes, restarts, logs), reusing the official CLI's login |
+
 ## Backup
 `bash backup.sh` copies the browser-bridge sources in, commits every change and pushes. `bash release.sh [tool]` rebuilds the release zips.

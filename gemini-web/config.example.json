@@ -6,6 +6,7 @@
     "video": "C:/path/to/videos",
     "music": "C:/path/to/music"
   },
-  "bridge_path": "C:/path/to/browser-bridge",
-  "bridge_profile": "<chrome profile name>"
+  "chrome_path": "C:/Program Files/Google/Chrome/Application/chrome.exe",
+  "profile_dir": "C:/path/to/browser_profile",
+  "chrome_proxy": "http://127.0.0.1:10808"
 }

@@ -1,8 +1,11 @@
 """gweb: the whole Gemini web app (gemini.google.com) from the command line, with your own Google account.
 
-Library: gemini_webapi (github HanaokaYuzu/Gemini-API, reverse-engineered web API). Cookies live in cookies.json
-(write it by hand, or fill it with grab_cookies.py if you use the Browser Bridge extension). Optional proxy for
+Library: gemini_webapi (github HanaokaYuzu/Gemini-API, reverse-engineered web API). Login: `gweb.py login` opens
+Chrome with the tool's own profile; you sign in to Google once. Before every call the tool reads fresh cookies from
+that profile (headless Chrome, DevTools Protocol) into cookies.json, an internal cache. Optional proxy for
 countries where Google is blocked. Settings: config.local.json or env vars, see config.example.json and README.md.
+
+  python gweb.py login                                  one-time sign-in to Google in a Chrome window
 
   python gweb.py ask "question" [-f file ...] [--model pro|flash|...] [--think] [--json]
         text answer; files may be images, video, audio, PDF, code (eyes and ears)
@@ -11,15 +14,15 @@ countries where Google is blocked. Settings: config.local.json or env vars, see 
   python gweb.py music "prompt" [--vocals] [--longer] [--out DIR]
   python gweb.py research "topic" [--out DIR]          Deep Research report (5-15 min) as .md
   python gweb.py status                                 models + quotas
-  python gweb.py refresh-cookies                        copy fresh cookies from your browser (needs Browser Bridge, see README)
+  python gweb.py refresh-cookies                        force a cookie refresh from the login profile
 
 Run with .venv/Scripts/python.exe. Saved files are printed as "SAVED <path>". Exit 1 on failure.
 """
-import argparse, asyncio, json, os, pathlib, subprocess, sys, time
+import argparse, asyncio, json, os, pathlib, sys, time
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import config
+import config, chrome_login
 PROXY = config.get("proxy", "GWEB_PROXY") or None   # e.g. http://127.0.0.1:10808; none = direct
 os.environ.setdefault("GEMINI_COOKIE_PATH", str(HERE / "cookie_cache"))
 _OUT = pathlib.Path(str(config.get("out_dir", "GWEB_OUT_DIR", HERE / "out")))   # base folder for saved files
@@ -30,15 +33,50 @@ _per = config._FILE.get("out_dirs") or {}
 DEFAULT_OUT.update({k: str(v) for k, v in _per.items() if k in DEFAULT_OUT})
 
 
-async def client():
+NEED_LOGIN = "gweb: not signed in. Run once: python gweb.py login"
+
+
+def ensure_cookies(force: bool = False) -> bool:
+    """Fresh cookies.json from the login profile (skipped if refreshed in the last ~10 minutes). False = not possible."""
+    if not chrome_login.profile_ready():
+        return False
+    if not force and chrome_login.cookies_fresh():
+        return True
+    try:
+        chrome_login.refresh_from_profile(force=force)
+        return True
+    except chrome_login.LoginError as e:
+        print(f"gweb: {e}", file=sys.stderr)
+        return False
+
+
+async def _connect():
     from gemini_webapi import GeminiClient, set_log_level
     set_log_level("WARNING")
-    jar = json.loads((HERE / "cookies.json").read_text(encoding="utf-8"))
+    jar = json.loads((HERE / "cookies.json").read_text(encoding="utf-8-sig"))
     c = GeminiClient(jar["__Secure-1PSID"], jar.get("__Secure-1PSIDTS", ""), proxy=PROXY)
-    # all Google cookies, so a solved CAPTCHA in his Chrome (GOOGLE_ABUSE_EXEMPTION) also clears the IP block here
+    # all Google cookies, so a solved CAPTCHA in the login browser (GOOGLE_ABUSE_EXEMPTION) also clears the IP block here
     c.cookies = jar
     await c.init(timeout=600, auto_close=False, auto_refresh=True)
     return c
+
+
+async def client():
+    from gemini_webapi.exceptions import AuthError
+    if not chrome_login.profile_ready():
+        sys.exit(NEED_LOGIN)
+    ensure_cookies()
+    if not (HERE / "cookies.json").exists():
+        sys.exit(NEED_LOGIN)
+    try:
+        return await _connect()
+    except (AuthError, KeyError):
+        if not ensure_cookies(force=True):   # retry once with cookies read again from the profile
+            sys.exit("gweb: Google rejected the cookies and they could not be refreshed. Run: python gweb.py login")
+    try:
+        return await _connect()
+    except (AuthError, KeyError):
+        sys.exit("gweb: Google rejected the login. Run: python gweb.py login")
 
 
 async def save_all(resp, out: pathlib.Path) -> list[str]:
@@ -124,13 +162,16 @@ def main():
         if name == "research":
             p.add_argument("--timeout", type=float, default=1200)
     sub.add_parser("status").add_argument("--out", default=None)
+    sub.add_parser("login")
     sub.add_parser("refresh-cookies")
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
-    if a.cmd == "refresh-cookies" or not (HERE / "cookies.json").exists():
-        subprocess.run([sys.executable, str(HERE / "grab_cookies.py")], check=True)
-        if a.cmd == "refresh-cookies":
-            return
+    if a.cmd == "login":
+        sys.exit(chrome_login.login())
+    if a.cmd == "refresh-cookies":
+        if not chrome_login.profile_ready():
+            sys.exit(NEED_LOGIN)
+        sys.exit(0 if ensure_cookies(force=True) else 1)
     a.model = getattr(a, "model", None)
     sys.exit(asyncio.run(run(a)))
 

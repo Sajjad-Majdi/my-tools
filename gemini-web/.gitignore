@@ -38,3 +38,7 @@ CLAUDE.md
 
 # per-user config
 config.local.json
+
+# Chrome login profile (holds the Google sign-in): never commit
+browser_profile/
+.refresh.lock
