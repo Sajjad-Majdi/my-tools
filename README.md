@@ -32,5 +32,10 @@ Replace `<tool>` with a folder name below (for example `flow-mcp`). Every value 
 |---|---|
 | [runflare-api](runflare-api/) | The full Runflare panel API from the command line (projects, apps, env vars, volumes, restarts, logs), reusing the official CLI's login |
 
+## Network
+| Tool | What it does |
+|---|---|
+| [vpn-watchdog](vpn-watchdog/) | Keeps a Windscribe VPN connected: reconnects by itself when the tunnel drops or stops passing traffic |
+
 ## Backup
 `bash backup.sh` copies the browser-bridge sources in, commits every change and pushes. `bash release.sh [tool]` rebuilds the release zips.

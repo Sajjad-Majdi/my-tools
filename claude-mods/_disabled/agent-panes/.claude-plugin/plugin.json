@@ -1,0 +1,13 @@
+{
+  "name": "agent-panes",
+  "version": "0.1.0",
+  "description": "A side pane that lists this session's subagents and background tasks; click one to follow its live work (status, time, model, tool calls, text, result). Toggle with /subagents.",
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open the subagents pane when a subagent starts",
+      "description": "Opens the pane by itself each time a new subagent starts.",
+      "default": true
+    }
+  }
+}
