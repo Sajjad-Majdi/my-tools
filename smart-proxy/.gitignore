@@ -1,0 +1,5 @@
+state/
+smart_proxy.log
+config.json
+extra_profiles.json
+__pycache__/

@@ -35,6 +35,7 @@ Replace `<tool>` with a folder name below (for example `flow-mcp`). Every value 
 ## Network
 | Tool | What it does |
 |---|---|
+| [smart-proxy](smart-proxy/) | One always-working local proxy from all your v2rayN profiles: xray balancer picks the fastest live one, rebuilds when all die |
 | [vpn-watchdog](vpn-watchdog/) | Keeps a Windscribe VPN connected: reconnects by itself when the tunnel drops or stops passing traffic |
 
 ## Backup
