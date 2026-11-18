@@ -52,6 +52,27 @@ function lanAddress() {
   return undefined;
 }
 
+// Quiet gap (2026-11-18): when the network drops, our side of the socket dies but Telegram can keep the old connection
+// (Worker -> Telegram) open. GramJS used to reconnect within seconds, through the Worker from ANOTHER Cloudflare IP, so
+// Telegram saw one auth key on two IPs at once and revoked it (AUTH_KEY_DUPLICATED; log 2026-11-15 21:57). GramJS pings
+// with PingDelayDisconnect(60 s): Telegram closes a connection 60 s after the last ping it got.
+// Routine closes (code 1006 every few minutes, measured 2026-11-19) reconnect at once, as before: the far side dropped them.
+// But when the socket died uncleanly AND the next connect attempt fails (our network is down, so the Worker's leg to
+// Telegram may still be alive), no new socket to that DC opens until QUIET_MS after the old socket's last traffic.
+export const QUIET_MS = 80_000;
+const lines = new Map(); // dc name -> { lastIo, unclean, risky }
+let quietLog = () => {};
+export const setQuietLogger = (fn) => (quietLog = fn);
+const lineOf = (name) => lines.get(name) || lines.set(name, { lastIo: 0, unclean: false, risky: false }).get(name);
+const dcName = (ip) => (ip.endsWith(".web.telegram.org") ? ip.split(".")[0] : IPS[ip] ? NAMES[IPS[ip] - 1] : null);
+
+/** ms to wait before a new socket to this DC may open (0 = safe now). */
+export function quietWaitMs(ipOrName) {
+  const l = lines.get(dcName(String(ipOrName)) || String(ipOrName));
+  if (!l || !l.risky) return 0;
+  return Math.max(0, l.lastIo + QUIET_MS - Date.now());
+}
+
 export function makeSocketClass(cfg) {
   return class RelaySocket extends PromisedWebSockets {
     async connect(port, ip, testServers = false) {
@@ -59,16 +80,49 @@ export function makeSocketClass(cfg) {
       this.canRead = new Promise((resolve) => { this.resolveRead = resolve; });
       this.closed = false;
       this.website = this.getWebSocketLink(ip, port, testServers);
+      const name = dcName(ip);
+      const line = lineOf(name);
+      const wait = quietWaitMs(name);
+      if (wait > 0) {
+        quietLog(`quiet gap: ${name} network was down after an unclean close; waiting ${Math.ceil(wait / 1000)} s so Telegram drops the old socket first`);
+        await new Promise((r) => setTimeout(r, wait));
+      }
+      // The client may have been destroyed during the wait (the daemon replaced it): never open a stray second socket.
+      if (this.constructor.abandoned) throw new Error("client destroyed; socket not opened");
       const localAddress = lanAddress();
-      this.client = new websocket.w3cwebsocket(this.website, "binary", undefined, undefined, localAddress ? { localAddress } : undefined);
+      const ws = new websocket.w3cwebsocket(this.website, "binary", undefined, undefined, localAddress ? { localAddress } : undefined);
+      this.client = ws;
       return new Promise((resolve, reject) => {
-        this.client.onopen = () => { this.receive(); resolve(this); };
-        this.client.onerror = (error) => reject(error);
-        this.client.onclose = () => {
+        let opened = false;
+        ws.onopen = () => {
+          opened = true;
+          line.unclean = false;
+          line.risky = false;
+          line.lastIo = Date.now();
+          this.receive();
+          const onmsg = ws.onmessage;
+          ws.onmessage = (m) => { line.lastIo = Date.now(); return onmsg(m); };
+          resolve(this);
+        };
+        ws.onerror = (error) => {
+          if (!opened && line.unclean && !line.risky) {
+            line.risky = true; // reconnect failed right after an unclean close: our side is offline
+            quietLog(`${name} reconnect failed after an unclean close: next connect waits for the quiet gap`);
+          }
+          reject(error);
+        };
+        ws.onclose = (ev) => {
           if (this.resolveRead) this.resolveRead(false);
           this.closed = true;
+          // w3cwebsocket: wasClean = close code 1000 (the close handshake finished); a dead network gives 1006.
+          if (opened && !(ev && ev.wasClean)) line.unclean = true;
         };
       });
+    }
+    write(data) {
+      super.write(data);
+      const name = this.website && this.website.split("/").slice(-2, -1)[0];
+      if (name) lineOf(name.replace(/-1$/, "")).lastIo = Date.now();
     }
     getWebSocketLink(ip) {
       let name = ip.endsWith(".web.telegram.org") ? ip.split(".")[0] : null;
@@ -90,6 +144,11 @@ class RelayClient extends TelegramClient {
   getSender(dcId) {
     if (!dcId || dcId === this.session.dcId) return Promise.resolve(this._sender);
     return super.getSender(dcId);
+  }
+  // A destroyed client must not open sockets later (a reconnect may be sleeping in the quiet gap).
+  async destroy() {
+    if (this.networkSocket) this.networkSocket.abandoned = true;
+    return super.destroy();
   }
 }
 

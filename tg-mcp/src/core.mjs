@@ -6,7 +6,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 import tg from "telegram";
 import { Logger, LogLevel } from "telegram/extensions/Logger.js";
-import { ROOT, loadConfig, saveConfig, loadSession, saveSession, makeClient } from "./tg.mjs";
+import { ROOT, loadConfig, saveConfig, loadSession, saveSession, makeClient, quietWaitMs, setQuietLogger } from "./tg.mjs";
 import os from "node:os";
 import { AUDIO_EXT, PHOTO_EXT, VIDEO_EXT, prepareVideo, prepareVoice, probe } from "./media.mjs";
 
@@ -21,6 +21,7 @@ let cfg = loadConfig();
 let logFn = (line) => console.error(line);
 export const setLogger = (fn) => (logFn = fn);
 export const log = (msg) => logFn(`[tg] ${msg}`);
+setQuietLogger(log);
 
 // ---------- throttling (official-app api_id: behave like one calm human client) ----------
 const GAP_MS = 1100; // min gap between any two Telegram API calls (all calls go through one queue)
@@ -144,6 +145,12 @@ function start(why = "") {
     const c = makeClient(cfg, s, { floodSleepThreshold: 0 }); // FLOOD_WAIT is handled by throttle() above
     c._log = new BridgeLogger(); // GramJS WARN/ERROR lines (reconnects, closed sockets) go to our log; set before connect() creates the sender
     throttle(c);
+    // After a socket that died uncleanly, wait until Telegram has dropped it (see QUIET_MS in tg.mjs), before the deadline starts.
+    const quiet = quietWaitMs(c.session.serverAddress || "");
+    if (quiet > 0) {
+      log(`waiting ${Math.ceil(quiet / 1000)} s before reconnecting (old socket did not close cleanly)`);
+      await sleep(quiet);
+    }
     const t0 = Date.now();
     try {
       await withDeadline(c.connect(), 60_000, "connect");
