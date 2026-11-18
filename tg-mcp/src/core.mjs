@@ -6,7 +6,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 import tg from "telegram";
 import { Logger, LogLevel } from "telegram/extensions/Logger.js";
-import { ROOT, loadConfig, loadSession, saveSession, makeClient } from "./tg.mjs";
+import { ROOT, loadConfig, saveConfig, loadSession, saveSession, makeClient } from "./tg.mjs";
 import os from "node:os";
 import { AUDIO_EXT, PHOTO_EXT, VIDEO_EXT, prepareVideo, prepareVoice, probe } from "./media.mjs";
 
@@ -162,6 +162,15 @@ function start(why = "") {
       loadedSession = now;
     }
     if (!dialogs) warmDialogs().catch(() => {}); // first connect only: fill the chat cache (4 getDialogs calls)
+    // Remember the account phone (config.json "phone", untracked) so login.cmd never asks for it again.
+    if (!cfg.phone)
+      c.getMe()
+        .then((me) => {
+          if (!me?.phone) return;
+          const fresh = loadConfig();
+          if (!fresh.phone) saveConfig({ ...fresh, phone: "+" + String(me.phone).replace(/^\+/, "") });
+        })
+        .catch(() => {});
     return c;
   })();
   ready.catch((e) => {

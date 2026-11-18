@@ -1,7 +1,7 @@
 // One-time login for tg-mcp. The account owner runs this (login.cmd) and types only phone, code and 2FA.
 // api_id/api_hash are read from config.json. Nothing typed here is printed back or logged. Writes session.txt.
 import readline from "node:readline";
-import { loadConfig, saveSession, makeClient } from "./src/tg.mjs";
+import { loadConfig, saveConfig, saveSession, makeClient } from "./src/tg.mjs";
 import { pauseDaemon, resumeDaemon } from "./src/client.mjs";
 
 const cfg = loadConfig();
@@ -38,7 +38,14 @@ const client = makeClient(cfg, "");
 try {
   console.log("\n  Connecting to Telegram ...");
   await client.start({
-    phoneNumber: () => ask("  Phone number (e.g. +98912...): "),
+    // The phone is saved in config.json ("phone", untracked) after the first good login and reused from then on.
+    phoneNumber: async () => {
+      if (cfg.phone) {
+        console.log(`  Phone: ${String(cfg.phone).replace(/^(\+?\d{4}).*(\d{2})$/, "$1*****$2")} (saved)`);
+        return String(cfg.phone);
+      }
+      return ask("  Phone number (e.g. +98912...): ");
+    },
     phoneCode: () => ask("  Code Telegram sent to your Telegram app: "),
     password: () => ask("  Two-step verification password (if set): ", true),
     onError: (e) => {
@@ -59,6 +66,11 @@ try {
   await client.disconnect().catch(() => {});
   await new Promise((r) => setTimeout(r, 1500));
   saveSession(fresh);
+  if (me.phone) {
+    const c = loadConfig();
+    const phone = "+" + String(me.phone).replace(/^\+/, "");
+    if (c.phone !== phone) saveConfig({ ...c, phone });
+  }
   console.log(`\n  Done. Logged in as ${[me.firstName, me.lastName].filter(Boolean).join(" ")}${me.username ? " (@" + me.username + ")" : ""}.`);
   console.log("  You can close this window. Claude picks up the new login by itself (no restart).\n");
 } catch (e) {
