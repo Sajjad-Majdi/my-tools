@@ -8,6 +8,7 @@
 //   tg download <chat> <message_id> [--dir folder]
 //   tg read <chat> [--max-id N]           mark as read
 //   tg send <chat> <text...> [--reply-to N]   (never to real people without the user's OK; same for the next four)
+//   tg send-album <chat> <path> <path> [...] [--caption "..."] [--reply-to N]
 //   tg send-file <chat> <path> [--caption "..."] [--as auto|photo|document|video|audio|voice] [--reply-to N]
 //   tg forward <from_chat> <id[,id...]> <to_chat> [--copy]   --copy = without "Forwarded from"
 //   tg edit <chat> <message_id> <text...>     edit one of the user's own messages
@@ -112,6 +113,11 @@ try {
     case "send-file": {
       if (!rest[0] || !rest[1]) die('usage: tg send-file <chat> <path> [--caption "..."] [--as auto|photo|document|video|audio|voice] [--reply-to N]');
       await tool("send_file", { chat: rest[0], path: path.resolve(rest[1]), caption: o.caption, as: o.as, reply_to: num(o["reply-to"]) });
+      break;
+    }
+    case "send-album": {
+      if (!rest[0] || rest.length < 3) die('usage: tg send-album <chat> <path> <path> [...] [--caption "..."] [--reply-to N]');
+      await tool("send_album", { chat: rest[0], paths: rest.slice(1).map((f) => path.resolve(f)), caption: o.caption, reply_to: num(o["reply-to"]) });
       break;
     }
     case "forward": {

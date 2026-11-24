@@ -122,13 +122,24 @@ function markDead(e) {
   const code = (errText(e).match(FATAL) || ["revoked"])[0];
   dead = `Telegram ended this login (${code}). The account owner must log in again: ${LOGIN}. Nothing reconnects until then.`;
   log(dead);
+  generation++; // a connect still in flight must not keep its socket either
   const c = client;
   client = null;
   dropClient(c);
 }
 
+// Each start() gets a number. Only the newest may keep its socket: an older attempt that finishes later closes its own
+// socket. A newer start also waits for the older attempt to settle first. Without this, two overlapping starts (a retry
+// and a hung-call check a few seconds apart) left two live sockets on one key, and Telegram revoked it with
+// AUTH_KEY_DUPLICATED (2026-11-23 14:32 and 16:04, both followed by a revoke).
+let generation = 0;
+let inflight = null; // the latest connect attempt; pause() clears `ready` but not this
+const supersededError = () => Object.assign(new Error("superseded by a newer connect"), { superseded: true });
+
 function start(why = "") {
   const old = client;
+  const prev = inflight;
+  const mine = ++generation;
   client = null;
   dead = null;
   dialogsAt = 0; // keep the old cache (titles, hashes are stable); refresh lazily, so a reconnect costs no getDialogs calls
@@ -137,6 +148,8 @@ function start(why = "") {
   loadedSession = loadSession();
   log(`connecting${why ? " (" + why + ")" : ""}`);
   ready = (async () => {
+    if (prev) await prev.catch(() => {}); // let an earlier attempt finish (it closes its own socket, see below)
+    if (mine !== generation) throw supersededError();
     if (old) await dropClient(old); // never two sockets on one key
     if (OFFLINE) throw new Error("offline test mode: no Telegram connection");
     cfg = loadConfig(); // re-read: login may have run after this process started
@@ -159,6 +172,10 @@ function start(why = "") {
       await dropClient(c);
       throw e;
     }
+    if (mine !== generation) {
+      await dropClient(c); // a newer start() is waiting: this socket must not stay open next to its socket
+      throw supersededError();
+    }
     client = c;
     startFailures = 0;
     stats.reconnects++;
@@ -180,7 +197,11 @@ function start(why = "") {
         .catch(() => {});
     return c;
   })();
+  inflight = ready;
+  const thisAttempt = ready;
+  ready.then(() => {}, () => {}).then(() => { if (inflight === thisAttempt) inflight = null; });
   ready.catch((e) => {
+    if (e?.superseded) return;
     startFailures++;
     log(`connect failed: ${errText(e)}`);
     if (FATAL.test(errText(e)) && !dead) markDead(e);
@@ -200,6 +221,7 @@ export function checkHealth(why = "watchdog") {
   if (paused || dead || OFFLINE) return;
   if (loadSession() !== loadedSession && loadedSession !== "") return start("session.txt changed"); // login wrote a new session
   if (!client) {
+    if (inflight) return; // a connect is still running: never start a second one next to it
     // connect failed earlier (network): retry with backoff, but never hammer the relay; NOT_LOGGED_IN waits for session.txt
     if (ready && startFailures && loadSession()) {
       const backoff = Math.min(300_000, 10_000 * 2 ** Math.min(startFailures - 1, 5));
@@ -226,6 +248,7 @@ async function tgc() {
   try {
     c = await ready;
   } catch (e) {
+    if (e?.superseded) return tgc(); // wait for the newer attempt instead of starting yet another one
     if (FATAL.test(errText(e))) {
       if (!dead) markDead(e);
       throw new Error(dead);
@@ -245,6 +268,7 @@ async function tgc() {
 // sees the key from two IPs and revokes it. resume() (or a changed session.txt, or 15 min) reconnects.
 export async function pause() {
   paused = Date.now();
+  generation++; // a connect still in flight closes its socket instead of keeping it
   const c = client;
   client = null;
   ready = null;
@@ -735,6 +759,32 @@ export const TOOLS = {
       } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
+    },
+  },
+  send_album: {
+    description:
+      "Send 2-10 local photos as ONE album message from the user's own account, with one caption (shown under the album, max 1024 chars). NEVER send to real people without the user's explicit approval for those exact files and caption.",
+    shape: {
+      chat: chatArg,
+      paths: z.array(z.string().min(1)).min(2).max(10).describe("Absolute paths of .jpg/.png files, each under 10 MB, in album order"),
+      caption: z.string().max(1024).optional(),
+      reply_to: z.number().int().optional(),
+    },
+    deadline: 30 * 60_000,
+    mayHaveSent: true,
+    async run({ chat, paths, caption, reply_to }) {
+      for (const f of paths) {
+        const st = fs.statSync(f);
+        if (!st.isFile() || !PHOTO_EXT.test(f) || st.size > 10 * 1024 * 1024) throw new Error(`Not a photo under 10 MB: ${f}`);
+      }
+      const c = await tgc();
+      const peer = await resolveChat(chat);
+      await sendSlot();
+      const t0 = Date.now();
+      // GramJS sends an array as an album; the caption list puts the text on the first photo, which Telegram shows for the album
+      const ms = await c.sendFile(peer, { file: paths, workers: 4, caption: [caption || "", ...paths.slice(1).map(() => "")], replyTo: reply_to });
+      const list = Array.isArray(ms) ? ms : [ms];
+      return { ids: list.map((m) => m.id), date: when(list[0].date), count: list.length, upload_ms: Date.now() - t0 };
     },
   },
   press_button: {

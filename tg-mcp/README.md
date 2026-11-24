@@ -37,7 +37,7 @@ Run in this folder.
 tg dialogs --limit 10 --compact
 tg history me --limit 20            # chat = numeric id, @username, t.me link, "me", or title part
 tg search "invoice" --since 2026-10-01
-tg send me "hello"                  # also: send-file, forward, edit, press, read, unread, download, archive
+tg send me "hello"                  # also: send-file, send-album (2-10 photos in one message), forward, edit, press, read, unread, download, archive
 tg log --n 40                       # daemon log; also: tg stop | restart | pause | resume
 ```
 Output is JSON. In Windows PowerShell 5.1 add `--ascii` for Persian text.

@@ -13,7 +13,8 @@ profiles, rebuilds and restarts xray, and logs DEAD so a human or agent can add 
 Proxy: HTTP 127.0.0.1:<http_port> (default 10820), SOCKS5 127.0.0.1:<socks_port> (default 10821).
 Settings: config.json next to this file (all optional), see README.md.
 """
-import json, os, socket, sqlite3, subprocess, sys, time, urllib.error, urllib.request
+import json, os, random, socket, sqlite3, ssl, subprocess, sys, time, urllib.error, urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -30,6 +31,12 @@ CFG = {
     # sites that block Cloudflare exit IPs: route them only through profiles whose exit is not a Cloudflare Worker/edge
     'noncf_domains': ['domain:sketchfab.com', 'domain:sketchfab-prod-media.s3.amazonaws.com'],
     'cf_markers': ['workers.dev', 'edge.', '104.1', '188.114.', '162.159.', '172.6'],   # optional list of xray outbound objects you add by hand
+    'use_v2rayn': True,          # false = only the tunnel (and extra_profiles.json)
+    'tunnel_file': 'tunnel.json',  # {"uuid", "path", "host"} of a cf-edge-tunnel Worker; its edge IPs are found automatically
+    'edge_prefixes': ['104.16', '104.17', '104.18', '104.19', '104.21', '104.24', '104.26', '172.64', '172.66', '172.67',
+                      '188.114.96', '188.114.97', '188.114.98', '188.114.99', '162.159.192', '162.159.193'],
+    'edge_pick': 4,              # how many of the fastest working edge IPs to use
+    'edge_fragment_only': True,  # filtered networks reset plain TLS to edge IPs; fragmented ClientHello survives
 }
 try:
     CFG.update(json.loads((HERE / 'config.json').read_text(encoding='utf-8')))
@@ -100,20 +107,63 @@ def outbound(r):
     return o
 
 
-def build():
-    db = sqlite3.connect(str(V2 / 'guiConfigs' / 'guiNDB.db'))
-    db.row_factory = sqlite3.Row
+def _edge_ok(ip, host):
+    """Seconds for an HTTPS GET of the tunnel Worker's front page through one Cloudflare edge IP, or None."""
+    t = time.time()
+    try:
+        raw = socket.create_connection((ip, 443), timeout=5)
+        with ssl.create_default_context().wrap_socket(raw, server_hostname=host) as s:
+            s.settimeout(5)
+            s.sendall(f'GET / HTTP/1.1\r\nHost: {host}\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n'.encode())
+            body = b''
+            while len(body) < 4096 and (chunk := s.recv(4096)):
+                body += chunk
+        return time.time() - t if b'It works' in body else None
+    except Exception:
+        return None
+
+
+def tunnel_outbounds():
+    """Outbounds for the tunnel Worker through the fastest Cloudflare edge IPs that answer from here right now."""
+    f = HERE / CFG['tunnel_file']
+    if not f.exists():
+        return []
+    tun = json.loads(f.read_text(encoding='utf-8'))
+    ips = [f'{p}.{random.randint(1, 254)}' if p.count('.') == 2 else f'{p}.{random.randint(0, 255)}.{random.randint(1, 254)}'
+           for p in CFG['edge_prefixes'] for _ in range(2)]
+    with ThreadPoolExecutor(16) as pool:
+        timed = [(t, ip) for ip, t in zip(ips, pool.map(lambda ip: _edge_ok(ip, tun['host']), ips)) if t]
+    best = [ip for _, ip in sorted(timed)[:CFG['edge_pick']]] or [tun['host']]
+    log(f'edge scan: {len(timed)}/{len(ips)} IPs answer; using {best}')
     outs = []
-    for r in db.execute('select * from ProfileItem'):
-        o = outbound(r)
-        if not o:
-            continue
-        outs.append(o)
-        ss = o['streamSettings']
-        if ss.get('security') == 'tls' and ss['network'] in ('ws', 'xhttp', 'grpc'):
-            f = json.loads(json.dumps(o))
-            f['streamSettings']['sockopt'] = {'dialerProxy': 'frag'}
-            outs.append(f)
+    for ip in best:
+        for frag in (True,) if CFG['edge_fragment_only'] else (True, False):  # fragment first: the balancer's fallback
+            ss = {'network': 'ws', 'security': 'tls',
+                  'tlsSettings': {'serverName': tun['host'], 'fingerprint': 'chrome', 'alpn': ['http/1.1']},
+                  'wsSettings': {'path': tun['path'] + '?ed=2048', 'headers': {'Host': tun['host']}}}
+            if frag:
+                ss['sockopt'] = {'dialerProxy': 'frag'}
+            outs.append({'protocol': 'vless', 'streamSettings': ss, 'settings': {'vnext': [
+                {'address': ip, 'port': 443, 'users': [{'id': tun['uuid'], 'encryption': 'none'}]}]}})
+    return outs
+
+
+def build():
+    outs = []
+    if CFG['use_v2rayn']:
+        db = sqlite3.connect(str(V2 / 'guiConfigs' / 'guiNDB.db'))
+        db.row_factory = sqlite3.Row
+        for r in db.execute('select * from ProfileItem'):
+            o = outbound(r)
+            if not o:
+                continue
+            outs.append(o)
+            ss = o['streamSettings']
+            if ss.get('security') == 'tls' and ss['network'] in ('ws', 'xhttp', 'grpc'):
+                f = json.loads(json.dumps(o))
+                f['streamSettings']['sockopt'] = {'dialerProxy': 'frag'}
+                outs.append(f)
+    outs += tunnel_outbounds()
     extra = HERE / CFG['extra_links_file']
     if extra.exists():
         outs += json.loads(extra.read_text(encoding='utf-8'))
@@ -121,6 +171,12 @@ def build():
         blob = json.dumps(o.get('settings', {})) + json.dumps(o.get('streamSettings', {}))
         cf = any(m in blob for m in CFG['cf_markers'])
         o['tag'] = f"p{'c' if cf else 'n'}{i:02d}"
+    rules = [{'type': 'field', 'ip': ['127.0.0.0/8', '10.0.0.0/8', '192.168.0.0/16'], 'outboundTag': 'direct'},
+             {'type': 'field', 'network': 'tcp,udp', 'balancerTag': 'best'}]
+    balancers = [{'tag': 'best', 'selector': ['p'], 'strategy': {'type': 'leastPing'}, 'fallbackTag': outs[0]['tag']}]
+    if any(o['tag'].startswith('pn') for o in outs):  # a non-Cloudflare exit exists for sites that block Cloudflare
+        rules.insert(1, {'type': 'field', 'domain': CFG['noncf_domains'], 'balancerTag': 'noncf'})
+        balancers.append({'tag': 'noncf', 'selector': ['pn'], 'strategy': {'type': 'leastPing'}, 'fallbackTag': outs[0]['tag']})
     conf = {
         'log': {'loglevel': 'warning'},
         'inbounds': [
@@ -134,12 +190,7 @@ def build():
             {'tag': 'direct', 'protocol': 'freedom'},
         ],
         'observatory': {'subjectSelector': ['p'], 'probeUrl': CFG['probe_url'], 'probeInterval': '60s', 'enableConcurrency': True},
-        'routing': {'domainStrategy': 'AsIs', 'balancers': [
-            {'tag': 'best', 'selector': ['p'], 'strategy': {'type': 'leastPing'}, 'fallbackTag': outs[0]['tag']},
-            {'tag': 'noncf', 'selector': ['pn'], 'strategy': {'type': 'leastPing'}, 'fallbackTag': outs[0]['tag']}],
-            'rules': [{'type': 'field', 'ip': ['127.0.0.0/8', '10.0.0.0/8', '192.168.0.0/16'], 'outboundTag': 'direct'},
-                      {'type': 'field', 'domain': CFG['noncf_domains'], 'balancerTag': 'noncf'},
-                      {'type': 'field', 'network': 'tcp,udp', 'balancerTag': 'best'}]},
+        'routing': {'domainStrategy': 'AsIs', 'balancers': balancers, 'rules': rules},
     }
     CONF.write_text(json.dumps(conf, indent=1), encoding='utf-8')
     return len(outs)
@@ -207,7 +258,7 @@ def run():
         if not good:
             log(f'check failed ({fails})')
         if fails >= CFG['fails_before_rebuild']:
-            log('DEAD: no profile works; re-reading v2rayN profiles and restarting xray')
+            log('DEAD: no profile works; re-reading profiles, re-scanning edge IPs and restarting xray')
             proc = start_xray(); time.sleep(70); fails = 0
         time.sleep(CFG['check_sec'])
 
