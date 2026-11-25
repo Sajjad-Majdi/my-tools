@@ -477,6 +477,18 @@ async function sendSlot() { // reserve a slot, so parallel sends also keep the g
   await sleep(at - Date.now());
 }
 
+// The agent's own "read up to here" mark per chat (key = marked peer id), kept apart from Telegram's read state.
+const MARKS = path.join(ROOT, "state", "read_marks.json");
+function loadMarks() {
+  try { return JSON.parse(fs.readFileSync(MARKS, "utf8")); } catch { return {}; }
+}
+function saveMarks(marks) {
+  fs.mkdirSync(path.dirname(MARKS), { recursive: true });
+  const tmp = MARKS + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(marks, null, 2));
+  fs.renameSync(tmp, MARKS);
+}
+
 function msg(m, withChat = false) {
   const o = { id: m.id, date: when(m.date) };
   if (withChat) o.chat = nameOf(m.chat) ?? String(m.chatId);
@@ -592,6 +604,53 @@ export const TOOLS = {
       }
       if (oldest_first) out.reverse();
       return out;
+    },
+  },
+  read_new: {
+    description:
+      "Messages of one chat that the agent has not read yet: everything after the chat's read mark, oldest first. The mark is the agent's own (state/read_marks.json), independent of Telegram's read state, so it still works after the user opened the chat. It does NOT move the mark: after reporting, call mark_seen with the newest id you handled. With no mark yet it returns the newest `first` messages.",
+    shape: {
+      chat: chatArg,
+      limit: z.number().int().min(1).max(1000).optional().describe("Max new messages (default 300); `more` says if there were more"),
+      first: z.number().int().min(1).max(200).optional().describe("Messages to return when the chat has no mark yet (default 30)"),
+    },
+    deadline: 180_000,
+    async run({ chat, limit = 300, first = 30 }) {
+      const c = await tgc();
+      const peer = await resolveChat(chat);
+      const key = String(await c.getPeerId(peer));
+      const prev = loadMarks()[key];
+      const out = [];
+      if (!prev) {
+        for await (const m of c.iterMessages(peer, { limit: first })) out.push(msg(m));
+        out.reverse();
+        return { chat_key: key, mark: null, note: `No mark yet for this chat: these are the newest ${out.length} messages.`, newest_id: out.at(-1)?.id ?? null, messages: out };
+      }
+      for await (const m of c.iterMessages(peer, { reverse: true, minId: prev.id, limit: limit + 1 })) out.push(msg(m));
+      const more = out.length > limit;
+      if (more) out.length = limit;
+      return { chat_key: key, mark: prev.id, marked_at: prev.at, new_count: out.length, more, newest_id: out.at(-1)?.id ?? prev.id, messages: out };
+    },
+  },
+  mark_seen: {
+    description: "Move the agent's read mark of a chat (see read_new) to message_id, or to the chat's newest message when no id is given. Does not touch Telegram's own read state.",
+    shape: {
+      chat: chatArg,
+      message_id: z.number().int().optional().describe("Newest message id you handled (default: the chat's newest message)"),
+    },
+    deadline: 60_000,
+    async run({ chat, message_id }) {
+      const c = await tgc();
+      const peer = await resolveChat(chat);
+      const key = String(await c.getPeerId(peer));
+      let id = message_id;
+      if (!id) for await (const m of c.iterMessages(peer, { limit: 1 })) id = m.id;
+      if (!id) throw new Error("the chat has no messages");
+      const marks = loadMarks();
+      const prev = marks[key]?.id ?? null;
+      marks[key] = { id, at: new Date().toISOString(), chat: String(chat) };
+      saveMarks(marks);
+      return { chat_key: key, previous: prev, mark: id };
     },
   },
   search_messages: {

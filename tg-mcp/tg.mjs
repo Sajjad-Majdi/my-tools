@@ -3,6 +3,8 @@
 //   tg status                      daemon + connection state (starts the daemon if needed)
 //   tg dialogs [query] [--limit 30] [--unread] [--type user|bot|group|channel] [--all] [--refresh]
 //   tg history <chat> [--limit 30] [--offset-id N] [--min-id N] [--since 2026-10-01] [--oldest-first]
+//   tg new <chat> [--limit 300] [--first 30]   messages after the agent's own read mark, oldest first (does not move it)
+//   tg seen <chat> [message_id]           move the read mark (default: the chat's newest message); run after reporting
 //   tg search <query> [--chat c] [--limit 20] [--since d]
 //   tg unread [--max-chats 20] [--per-chat 10] [--muted]
 //   tg download <chat> <message_id> [--dir folder]
@@ -32,7 +34,7 @@ const { values: o, positionals: p } = parseArgs({
   allowPositionals: true,
   strict: false,
   options: {
-    limit: { type: "string" }, "offset-id": { type: "string" }, "min-id": { type: "string" }, since: { type: "string" },
+    limit: { type: "string" }, "offset-id": { type: "string" }, "min-id": { type: "string" }, first: { type: "string" }, since: { type: "string" },
     "oldest-first": { type: "boolean" }, unread: { type: "boolean" }, type: { type: "string" }, refresh: { type: "boolean" }, all: { type: "boolean" },
     chat: { type: "string" }, "max-chats": { type: "string" }, "per-chat": { type: "string" }, muted: { type: "boolean" },
     dir: { type: "string" }, "max-id": { type: "string" }, "reply-to": { type: "string" }, n: { type: "string" },
@@ -87,6 +89,16 @@ try {
     case "history": {
       if (!rest[0]) die("usage: tg history <chat> [--limit N] [--offset-id N] [--min-id N] [--since d] [--oldest-first]");
       await tool("read_history", { chat: rest[0], limit: num(o.limit), offset_id: num(o["offset-id"]), min_id: num(o["min-id"]), since: o.since, oldest_first: o["oldest-first"] });
+      break;
+    }
+    case "new": {
+      if (!rest[0]) die("usage: tg new <chat> [--limit N] [--first N]");
+      await tool("read_new", { chat: rest[0], limit: num(o.limit), first: num(o.first) });
+      break;
+    }
+    case "seen": {
+      if (!rest[0]) die("usage: tg seen <chat> [message_id]");
+      await tool("mark_seen", { chat: rest[0], message_id: num(rest[1]) });
       break;
     }
     case "search": {

@@ -36,6 +36,8 @@ Run in this folder.
 ```
 tg dialogs --limit 10 --compact
 tg history me --limit 20            # chat = numeric id, @username, t.me link, "me", or title part
+tg new @someone                     # only messages after the agent's own read mark, oldest first (first time: newest 30)
+tg seen @someone [id]               # after reporting: move the mark to the newest handled id (marks: state/read_marks.json)
 tg search "invoice" --since 2026-10-01
 tg send me "hello"                  # also: send-file, send-album (2-10 photos in one message), forward, edit, press, read, unread, download, archive
 tg log --n 40                       # daemon log; also: tg stop | restart | pause | resume
