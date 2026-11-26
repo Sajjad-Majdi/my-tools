@@ -240,9 +240,10 @@ class Flow:
             raise FlowError(f'project {project_id} opens as 404')
         if pg.get_by_label('Dismiss announcement').count():
             pg.get_by_label('Dismiss announcement').click()
-        ag = pg.get_by_role('button', name='Agent', exact=True).first
-        if ag.get_attribute('aria-pressed') == 'true':  # direct composer, not Flow's agent
-            ag.click(); pg.wait_for_timeout(1200)
+        ag = pg.get_by_role('button', name='Agent', exact=True)
+        # direct composer, not Flow's agent; newer pages (2026-11-26) have no Agent pill at all
+        if ag.count() and ag.first.get_attribute('aria-pressed') == 'true':
+            ag.first.click(); pg.wait_for_timeout(1200)
         return pg
 
     @staticmethod
